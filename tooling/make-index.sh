@@ -106,6 +106,12 @@ CSS
 echo '${repo_url}' >> /etc/apk/repositories
 apk update && apk add ${addlist}"
       ce=$(printf '%s' "$cmd" | esc)
+      re=$(printf '%s' "$repo_url" | esc)
+      printf '<h2>Repository URL</h2>\n'
+      printf '<p><code id="ru">%s</code> \n' "$re"
+      cat <<'RUBTN'
+<button onclick="navigator.clipboard.writeText(document.getElementById('ru').textContent).then(()=>{this.textContent='Copied ✓';setTimeout(()=>this.textContent='Copy URL',1500)})">Copy URL</button></p>
+RUBTN
       printf '<h2>Install on this arch</h2>\n'
       printf '<pre><code id="ic">%s</code></pre>\n' "$ce"
       cat <<'BTN'
