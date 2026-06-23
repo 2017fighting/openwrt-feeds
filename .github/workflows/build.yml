@@ -1,0 +1,187 @@
+name: build
+
+# Build every feed package for each (OpenWrt version x arch), generate + sign
+# the apk repository index, and publish the whole site to GitHub Pages.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'net/**'
+      - 'feeds.config'
+      - 'keys/key-build.pub'
+      - '.github/workflows/build.yml'
+      - '.github/workflows/keygen.yml'
+  workflow_dispatch:
+
+# Let the latest run finish publishing; do not cancel an in-progress deploy.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+env:
+  FEED_NAME: openwrtfeeds
+  GO_VERSION: '1.26'
+
+jobs:
+  build:
+    name: Build ${{ matrix.openwrt_version }} / ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # v1: single entry mirroring feeds.config. To add a version/arch, append
+      # here (and to feeds.config); the SDK URL is derived from these fields.
+      matrix:
+        include:
+          - openwrt_version: '25.12.4'
+            arch: 'x86_64'
+            target: 'x86'
+            subtarget: '64'
+            goarch: 'amd64'
+            gcc_ver: '14.3.0'
+    steps:
+      - name: Checkout feed
+        uses: actions/checkout@v4
+
+      - name: Set up Go (host toolchain; cross-compiles mosdns)
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false  # no go.sum at repo root; Go modules resolve inside the SDK build
+
+      - name: Expose Go to the SDK build environment
+        run: |
+          echo "$(go env GOROOT)/bin" >> $GITHUB_PATH
+          echo "GOROOT=$(go env GOROOT)" >> $GITHUB_ENV
+          echo "GOPATH=$(go env GOPATH)" >> $GITHUB_ENV
+          go version
+
+      - name: Compute SDK URL
+        id: sdk
+        run: |
+          v="${{ matrix.openwrt_version }}"
+          name="openwrt-sdk-${v}-${{ matrix.target }}-${{ matrix.subtarget }}_gcc-${{ matrix.gcc_ver }}_musl.Linux-x86_64"
+          url="https://downloads.openwrt.org/releases/${v}/targets/${{ matrix.target }}/${{ matrix.subtarget }}/${name}.tar.zst"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "url=$url"   >> "$GITHUB_OUTPUT"
+          echo "$url"
+
+      - name: Cache extracted SDK
+        id: cache-sdk
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/sdk
+          key: sdk-${{ matrix.openwrt_version }}-${{ matrix.target }}-${{ matrix.subtarget }}-${{ matrix.gcc_ver }}-v1
+
+      - name: Download + extract SDK
+        if: steps.cache-sdk.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/sdk"
+          curl -fL "${{ steps.sdk.outputs.url }}" -o sdk.tar.zst
+          tar -I zstd -xf sdk.tar.zst -C "$GITHUB_WORKSPACE/sdk" --strip-components=1
+          rm sdk.tar.zst
+
+      - name: Verify signing prerequisites
+        env:
+          APK_SIGN_KEY: ${{ secrets.APK_SIGN_KEY }}
+        run: |
+          [ -n "$APK_SIGN_KEY" ] || { echo "::error::Actions secret APK_SIGN_KEY is not set. Run the 'keygen' workflow, then add the secret."; exit 1; }
+          [ -f keys/key-build.pub ] || { echo "::error::keys/key-build.pub is missing. Run the 'keygen' workflow and commit the public key."; exit 1; }
+
+      - name: Install signing keys into the SDK
+        env:
+          APK_SIGN_KEY: ${{ secrets.APK_SIGN_KEY }}
+        run: |
+          SDK="$GITHUB_WORKSPACE/sdk"
+          printf '%s' "$APK_SIGN_KEY" | base64 -d > "$SDK/key-build"
+          cp keys/key-build.pub "$SDK/key-build.pub"
+          chmod 600 "$SDK/key-build"
+
+      - name: Register this repo as a feed
+        run: |
+          printf 'src-link %s %s\n' "$FEED_NAME" "$GITHUB_WORKSPACE" >> "$GITHUB_WORKSPACE/sdk/feeds.conf"
+          echo "--- feeds.conf ---"; cat "$GITHUB_WORKSPACE/sdk/feeds.conf"
+
+      - name: Update + install feeds
+        working-directory: ${{ github.workspace }}/sdk
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install mosdns
+
+      - name: Build mosdns
+        working-directory: ${{ github.workspace }}/sdk
+        run: make "package/feeds/$FEED_NAME/mosdns/compile" -j"$(nproc)" V=s
+
+      - name: Smoke-test the built binary (linux/amd64 on the linux/amd64 runner)
+        run: |
+          SDK="$GITHUB_WORKSPACE/sdk"
+          bin="$(find "$SDK/build_dir" -path '*mosdns-*/mosdns' -type f | head -1)"
+          [ -n "$bin" ] || { echo "::error::mosdns binary not found in build_dir"; find "$SDK/build_dir" -maxdepth 4 -name mosdns; exit 1; }
+          echo "binary: $bin"
+          "$bin" version
+
+      - name: Generate repository index
+        working-directory: ${{ github.workspace }}/sdk
+        run: make package/index -j1 V=s
+
+      - name: Sign index (usign fallback) + verify
+        run: |
+          SDK="$GITHUB_WORKSPACE/sdk"
+          OUT="$SDK/bin/packages/${{ matrix.arch }}/$FEED_NAME"
+          [ -f "$OUT/packages.adb" ] || { echo "::error::packages.adb was not generated"; ls -R "$SDK/bin/packages"; exit 1; }
+          if [ ! -f "$OUT/packages.adb.sig" ]; then
+            echo "buildroot did not sign; signing explicitly with usign"
+            "$SDK/staging_dir/host/bin/usign" -S -s "$SDK/key-build" -m "$OUT/packages.adb"
+          fi
+          [ -f "$OUT/packages.adb.sig" ] || { echo "::error::failed to create packages.adb.sig"; exit 1; }
+          echo "--- feed dir ---"; ls -l "$OUT"
+
+      - name: Assemble site slice
+        run: |
+          SDK="$GITHUB_WORKSPACE/sdk"
+          OUT="$SDK/bin/packages/${{ matrix.arch }}/$FEED_NAME"
+          DEST="site/${{ matrix.openwrt_version }}/${{ matrix.arch }}"
+          mkdir -p "$DEST"
+          cp "$OUT"/*.apk "$DEST"/
+          cp "$OUT/packages.adb" "$OUT/packages.adb.sig" "$DEST"/
+          cp "$OUT/index.json" "$DEST"/ 2>/dev/null || true
+          echo "--- site slice ---"; ls -l "$DEST"
+
+      - name: Upload site artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-${{ matrix.openwrt_version }}-${{ matrix.arch }}
+          path: site/
+          retention-days: 7
+          if-no-files-found: error
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download all site artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: site-*
+          path: site
+          merge-multiple: true
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
