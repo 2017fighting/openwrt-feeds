@@ -70,20 +70,24 @@ jobs:
           echo "url=$url"   >> "$GITHUB_OUTPUT"
           echo "$url"
 
-      - name: Cache extracted SDK
+      - name: Cache SDK tarball (public; saves re-downloading)
         id: cache-sdk
         uses: actions/cache@v4
         with:
-          path: ${{ github.workspace }}/sdk
-          key: sdk-${{ matrix.openwrt_version }}-${{ matrix.target }}-${{ matrix.subtarget }}-${{ matrix.gcc_ver }}-v1
+          path: ${{ github.workspace }}/sdk.tar.zst
+          key: sdk-tarball-${{ matrix.openwrt_version }}-${{ matrix.target }}-${{ matrix.subtarget }}-${{ matrix.gcc_ver }}
 
-      - name: Download + extract SDK
+      - name: Download SDK tarball
         if: steps.cache-sdk.outputs.cache-hit != 'true'
+        run: curl -fL "${{ steps.sdk.outputs.url }}" -o "$GITHUB_WORKSPACE/sdk.tar.zst"
+
+      # Always extract fresh: never cache the extracted tree, so feed/key state
+      # cannot leak across runs (a leaked feeds.conf caused a duplicate entry).
+      - name: Extract SDK
         run: |
+          rm -rf "$GITHUB_WORKSPACE/sdk"
           mkdir -p "$GITHUB_WORKSPACE/sdk"
-          curl -fL "${{ steps.sdk.outputs.url }}" -o sdk.tar.zst
-          tar -I zstd -xf sdk.tar.zst -C "$GITHUB_WORKSPACE/sdk" --strip-components=1
-          rm sdk.tar.zst
+          tar -I zstd -xf "$GITHUB_WORKSPACE/sdk.tar.zst" -C "$GITHUB_WORKSPACE/sdk" --strip-components=1
 
       - name: Verify signing prerequisites
         env:
@@ -101,10 +105,12 @@ jobs:
           cp keys/key-build.pub "$SDK/key-build.pub"
           chmod 600 "$SDK/key-build"
 
-      - name: Register this repo as a feed
+      - name: Register this repo as a feed (idempotent)
         run: |
-          printf 'src-link %s %s\n' "$FEED_NAME" "$GITHUB_WORKSPACE" >> "$GITHUB_WORKSPACE/sdk/feeds.conf"
-          echo "--- feeds.conf ---"; cat "$GITHUB_WORKSPACE/sdk/feeds.conf"
+          SDK="$GITHUB_WORKSPACE/sdk"
+          grep -qxF "src-link $FEED_NAME $GITHUB_WORKSPACE" "$SDK/feeds.conf" \
+            || printf 'src-link %s %s\n' "$FEED_NAME" "$GITHUB_WORKSPACE" >> "$SDK/feeds.conf"
+          echo "--- feeds.conf ---"; cat "$SDK/feeds.conf"
 
       - name: Update + install feeds
         working-directory: ${{ github.workspace }}/sdk
