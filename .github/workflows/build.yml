@@ -117,6 +117,14 @@ jobs:
       - name: Register this repo as a feed (idempotent)
         run: |
           SDK="$GITHUB_WORKSPACE/sdk"
+          # The SDK ships feeds.conf.default (luci/packages/...) but no feeds.conf.
+          # Seed feeds.conf with the luci feed (luci.mk) that luci-app-mosdns builds
+          # against; luci-only to avoid cloning the large packages feed. Fall back to
+          # the full defaults if the luci line isn't found.
+          if [ ! -f "$SDK/feeds.conf" ]; then
+            awk '$2=="luci"{print}' "$SDK/feeds.conf.default" > "$SDK/feeds.conf" 2>/dev/null || true
+            [ -s "$SDK/feeds.conf" ] || cp "$SDK/feeds.conf.default" "$SDK/feeds.conf"
+          fi
           grep -qxF "src-link $FEED_NAME $GITHUB_WORKSPACE" "$SDK/feeds.conf" \
             || printf 'src-link %s %s\n' "$FEED_NAME" "$GITHUB_WORKSPACE" >> "$SDK/feeds.conf"
           echo "--- feeds.conf ---"; cat "$SDK/feeds.conf"
