@@ -186,12 +186,24 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Checkout repo (for tooling/ and keys/)
+        uses: actions/checkout@v4
+
       - name: Download all site artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: site-*
           path: site
           merge-multiple: true
+
+      - name: Add public key + README to the site
+        run: |
+          mkdir -p site/keys
+          cp keys/key-build.pub site/keys/key-build.pub
+          cp README.md site/README.md
+
+      - name: Generate browsable index.html (Pages has no directory autoindex)
+        run: sh tooling/make-index.sh site
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
