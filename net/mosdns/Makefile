@@ -25,9 +25,9 @@ PKG_LICENSE:=GPL-3.0
 PKG_LICENSE_FILES:=LICENSE
 PKG_MAINTAINER:=2017fighting
 
-# v1 target is x86/64 only. GOARCH is hard-coded accordingly; a future
-# multi-arch feed would parameterise this (see feeds.config).
-MOSDNS_GOARCH:=amd64
+# GOARCH for the Go cross-compile. Default amd64; overridden from the workflow
+# matrix (arm64 for aarch64_generic, etc.) via `make ... MOSDNS_GOARCH=<goarch>`.
+MOSDNS_GOARCH?=amd64
 MOSDNS_GOVERSION:=$(PKG_VERSION)
 
 include $(INCLUDE_DIR)/package.mk
@@ -39,8 +39,8 @@ define Package/mosdns
   TITLE:=mosdns - plugin-based DNS forwarder
   URL:=https://github.com/IrineSistiana/mosdns
   DEPENDS:=
-  # Pure-Go static binary; pin to the arch it was cross-compiled for.
-  PKGARCH:=x86_64
+  # Pure-Go static binary; PKGARCH auto-detects the SDK target arch
+  # (x86_64 / aarch64_generic / ...), so the same Makefile is multi-arch.
 endef
 
 define Package/mosdns/description

@@ -11,6 +11,7 @@ on:
       - 'keys/key-build.pub'
       - '.github/workflows/build.yml'
       - '.github/workflows/keygen.yml'
+      - 'tooling/**'
   workflow_dispatch:
 
 # Let the latest run finish publishing; do not cancel an in-progress deploy.
@@ -28,21 +29,28 @@ env:
   GO_VERSION: '1.26'
 
 jobs:
+  # Read feeds.config and emit the matrix as JSON. Adding a version/arch is now
+  # a one-line change in feeds.config — no workflow edit needed.
+  matrix:
+    name: Build matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: set
+        run: |
+          m="$(jq -c '{include: .feeds}' feeds.config)"
+          echo "matrix=$m" >> "$GITHUB_OUTPUT"
+          echo "$m"
+
   build:
     name: Build ${{ matrix.openwrt_version }} / ${{ matrix.arch }}
+    needs: [matrix]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      # v1: single entry mirroring feeds.config. To add a version/arch, append
-      # here (and to feeds.config); the SDK URL is derived from these fields.
-      matrix:
-        include:
-          - openwrt_version: '25.12.4'
-            arch: 'x86_64'
-            target: 'x86'
-            subtarget: '64'
-            goarch: 'amd64'
-            gcc_ver: '14.3.0'
+      matrix: ${{ fromJson(needs.matrix.outputs.matrix) }}
     steps:
       - name: Checkout feed
         uses: actions/checkout@v4
@@ -139,15 +147,20 @@ jobs:
 
       - name: Build mosdns
         working-directory: ${{ github.workspace }}/sdk
-        run: make "package/feeds/$FEED_NAME/mosdns/compile" -j"$(nproc)" V=s
+        run: make "package/feeds/$FEED_NAME/mosdns/compile" MOSDNS_GOARCH="${{ matrix.goarch }}" -j"$(nproc)" V=s
 
-      - name: Smoke-test the built binary (linux/amd64 on the linux/amd64 runner)
+      - name: Smoke-test the built binary
         run: |
           SDK="$GITHUB_WORKSPACE/sdk"
           bin="$(find "$SDK/build_dir" -path '*mosdns-*/mosdns' -type f | head -1)"
           [ -n "$bin" ] || { echo "::error::mosdns binary not found in build_dir"; find "$SDK/build_dir" -maxdepth 4 -name mosdns; exit 1; }
           echo "binary: $bin"
-          "$bin" version
+          if [ "${{ matrix.goarch }}" = "amd64" ]; then
+            "$bin" version          # runner is amd64 -> can execute directly
+          else
+            file "$bin"             # cross-arch binary; cannot exec on amd64 runner
+            echo "(exec smoke skipped: ${{ matrix.goarch }} binary on amd64 runner)"
+          fi
 
       - name: Generate repository index
         working-directory: ${{ github.workspace }}/sdk
@@ -209,6 +222,8 @@ jobs:
           cp README.md site/README.md
 
       - name: Generate browsable index.html (Pages has no directory autoindex)
+        env:
+          SITE_BASE: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
         run: sh tooling/make-index.sh site
 
       - name: Configure Pages
