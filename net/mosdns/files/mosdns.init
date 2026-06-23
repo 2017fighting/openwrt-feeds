@@ -1,47 +1,127 @@
 #!/bin/sh /etc/rc.common
 #
-# Copyright (C) 2020-2022, IrineSistiana
+# mosdns procd init — generic, UCI-aware.
 #
-# This file is part of mosdns.
+# UCI (/etc/config/mosdns):
+#   option enabled     '0|1'             enable the service
+#   option configfile  '/path/to.yaml'   config passed to `mosdns start -c`
+#   option redirect    '0|1'             point dnsmasq at mosdns (DNS forward)
 #
-# mosdns is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
+# The mosdns package ships a harmless default at /etc/mosdns/config.yaml.
+# luci-app-mosdns re-points configfile at /etc/mosdns/config_custom.yaml.
 #
-# mosdns is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-#
+# When redirect=1, the listen port is parsed from the YAML's `listen:` field
+# (e.g. ":1053" or "0.0.0.0:1053") and dnsmasq is given server 127.0.0.1#<port>.
+# Original dnsmasq state is saved to a lock file and restored on disable/stop.
 
 START=99
 USE_PROCD=1
 
-#####  ONLY CHANGE THIS BLOCK  ######
-PROG=/usr/bin/mosdns # where is mosdns
-RES_DIR=/etc/mosdns/ # resource dir / working dir / the dir where you store ip/domain lists
-CONF=./config.yaml   # where is the config file, it can be a relative path to $RES_DIR
-#####  ONLY CHANGE THIS BLOCK  ######
+PROG=/usr/bin/mosdns
+RES_DIR=/etc/mosdns
+CONF=/etc/mosdns/config.yaml
+REDIRECT_LOCK_FILE=/etc/mosdns/redirect.lock
 
-start_service() {
-  procd_open_instance
-  procd_set_param command $PROG start -d $RES_DIR -c $CONF
+get_config() {
+	config_get enabled    $1 enabled    0
+	config_get configfile $1 configfile "$CONF"
+	config_get redirect   $1 redirect   0
+	CONF="$configfile"
+}
 
-  procd_set_param user root
-  procd_set_param stdout 1
-  procd_set_param stderr 1
-  procd_set_param respawn "${respawn_threshold:-3600}" "${respawn_timeout:-5}" "${respawn_retry:-5}"
-  procd_close_instance
-  echo "mosdns is started!"
+# Extract the listen port from the active YAML (last numeric token on a
+# `listen:` line, so both ":1053" and "0.0.0.0:1053" yield 1053).
+listen_port() {
+	local port
+	port=$(awk -F'[:" ]+' '/^[[:space:]]*listen:[[:space:]]*"?[0-9:.\"]/{
+		for (i = NF; i >= 1; i--) { if ($i ~ /^[0-9]+$/) { print $i; exit } }
+	}' "$CONF")
+	echo "${port:-1053}"
+}
+
+uci_set_or_del() {
+	local key="$1"
+	local val="$2"
+	if [ -n "$val" ]; then
+		uci set "$key=$val"
+	else
+		uci del "$key"
+	fi
+}
+
+dhcp_setting() {
+	[ ! -f "$REDIRECT_LOCK_FILE" ] && {
+		printf "rebind_protection=$(uci -q get dhcp.@dnsmasq[0].rebind_protection)\n"
+		printf "rebind_localhost=$(uci -q get dhcp.@dnsmasq[0].rebind_localhost)\n"
+		printf "noresolv=$(uci -q get dhcp.@dnsmasq[0].noresolv)\n"
+		printf "resolvfile=$(uci -q get dhcp.@dnsmasq[0].resolvfile)\n"
+		printf "cachesize=$(uci -q get dhcp.@dnsmasq[0].cachesize)\n"
+	} > $REDIRECT_LOCK_FILE
+
+	sed -i "/list server/d" /etc/config/dhcp
+	uci add_list dhcp.@dnsmasq[0].server="127.0.0.1#$(listen_port)"
+	uci set dhcp.@dnsmasq[0].rebind_protection='0'
+	uci set dhcp.@dnsmasq[0].noresolv="1"
+	uci set dhcp.@dnsmasq[0].cachesize='0'
+	uci commit dhcp
+}
+
+restore_dhcp_setting() {
+	if [ -f "$REDIRECT_LOCK_FILE" ]; then
+		sed -i "/list server/d" /etc/config/dhcp
+		source "$REDIRECT_LOCK_FILE"
+
+		uci_set_or_del dhcp.@dnsmasq[0].rebind_protection "$rebind_protection"
+		uci_set_or_del dhcp.@dnsmasq[0].resolvfile "$resolvfile"
+		uci_set_or_del dhcp.@dnsmasq[0].rebind_localhost "$rebind_localhost"
+		uci_set_or_del dhcp.@dnsmasq[0].noresolv "$noresolv"
+		uci_set_or_del dhcp.@dnsmasq[0].cachesize "$cachesize"
+
+		uci commit dhcp
+		rm -f "$REDIRECT_LOCK_FILE"
+	fi
+}
+
+reload_dnsmasq() {
+	[ "$(/etc/init.d/dnsmasq status)" = "running" ] && /etc/init.d/dnsmasq reload
+}
+
+service_triggers() {
+	procd_add_reload_trigger "mosdns"
 }
 
 reload_service() {
-  stop
-  sleep 2s
-  echo "mosdns is restarted!"
-  start
+	stop
+	sleep 1
+	start
+}
+
+start_service() {
+	config_load "mosdns"
+	config_foreach get_config "mosdns"
+
+	[ "$enabled" = "1" ] || return 1
+	[ -n "$CONF" ] || CONF="/etc/mosdns/config.yaml"
+
+	rm -rf /tmp/log/mosdns*
+
+	procd_open_instance mosdns
+	procd_set_param env QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING=true
+	procd_set_param command $PROG start
+	procd_append_param command -c "$CONF"
+	procd_append_param command -d "$RES_DIR"
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	procd_set_param respawn
+	procd_close_instance mosdns
+
+	[ "$redirect" = "1" ] && dhcp_setting || restore_dhcp_setting
+	reload_dnsmasq
+}
+
+stop_service() {
+	config_load "mosdns"
+	config_foreach get_config "mosdns"
+	restore_dhcp_setting
+	reload_dnsmasq
 }

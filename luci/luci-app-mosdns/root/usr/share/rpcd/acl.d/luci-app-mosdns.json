@@ -1,0 +1,36 @@
+{
+	"luci-app-mosdns": {
+		"description": "Grant access for luci-app-mosdns",
+		"read": {
+			"file": {
+				"/etc/mosdns/config_custom.yaml": [ "read" ],
+				"/etc/mosdns/rule/*": [ "read" ],
+				"/etc/init.d/mosdns": [ "exec" ],
+				"/usr/bin/mosdns": [ "exec" ],
+				"/var/log/*": [ "read" ]
+			},
+			"ubus": {
+				"file": [ "read" ],
+				"service": [ "list" ],
+				"luci.mosdns": [
+					"print_log",
+					"clean_log",
+					"get_cfst_status",
+					"reprobe"
+				]
+			},
+			"uci": [ "mosdns" ]
+		},
+		"write": {
+			"file": {
+				"/etc/mosdns/config_custom.yaml": [ "write" ],
+				"/etc/mosdns/rule/*": [ "write" ],
+				"/var/log/*": [ "write" ]
+			},
+			"ubus": {
+				"file": [ "write" ]
+			},
+			"uci": [ "mosdns" ]
+		}
+	}
+}

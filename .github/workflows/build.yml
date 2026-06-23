@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths:
       - 'net/**'
+      - 'luci/**'
       - 'feeds.config'
       - 'keys/key-build.pub'
       - '.github/workflows/build.yml'
@@ -124,7 +125,8 @@ jobs:
         working-directory: ${{ github.workspace }}/sdk
         run: |
           ./scripts/feeds update -a
-          ./scripts/feeds install mosdns
+          # luci-app-mosdns builds via feeds/luci/luci.mk (fetched by update -a).
+          ./scripts/feeds install mosdns luci-app-mosdns
 
       # The SDK ships no usable .config for CI, so a package compile would
       # otherwise trigger the interactive `menuconfig` (mconf) and die with
@@ -149,6 +151,10 @@ jobs:
         working-directory: ${{ github.workspace }}/sdk
         run: make "package/feeds/$FEED_NAME/mosdns/compile" MOSDNS_GOARCH="${{ matrix.goarch }}" -j"$(nproc)" V=s
 
+      - name: Build luci-app-mosdns
+        working-directory: ${{ github.workspace }}/sdk
+        run: make "package/feeds/$FEED_NAME/luci-app-mosdns/compile" -j"$(nproc)" V=s
+
       - name: Smoke-test the built binary
         run: |
           SDK="$GITHUB_WORKSPACE/sdk"
@@ -161,6 +167,17 @@ jobs:
             file "$bin"             # cross-arch binary; cannot exec on amd64 runner
             echo "(exec smoke skipped: ${{ matrix.goarch }} binary on amd64 runner)"
           fi
+
+      - name: Stage all-arch luci-app apk into the arch feed dir
+        run: |
+          SDK="$GITHUB_WORKSPACE/sdk"
+          OUT="$SDK/bin/packages/${{ matrix.arch }}/$FEED_NAME"
+          mkdir -p "$OUT"
+          # luci-app-mosdns is PKGARCH:=all and may land outside the per-arch
+          # feed dir; copy it in so it is indexed + signed with this arch's
+          # packages.adb (both matrix jobs do this -> both slices carry it).
+          find "$SDK/bin/packages" -type f -name 'luci-app-mosdns-*.apk' -exec cp -f {} "$OUT/" \;
+          echo "--- staged luci-app apk ---"; ls -l "$OUT"/luci-app-mosdns-*.apk 2>/dev/null || true
 
       - name: Generate repository index
         working-directory: ${{ github.workspace }}/sdk

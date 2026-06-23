@@ -61,7 +61,10 @@ define Package/mosdns/install
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/mosdns $(1)/usr/bin/mosdns
 
 	$(INSTALL_DIR) $(1)/etc/mosdns
-	$(INSTALL_CONF) ./files/mosdns.config $(1)/etc/mosdns/config.yaml
+	$(INSTALL_CONF) ./files/config.yaml $(1)/etc/mosdns/config.yaml
+
+	$(INSTALL_DIR) $(1)/etc/config
+	$(INSTALL_CONF) ./files/mosdns.uci $(1)/etc/config/mosdns
 
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/mosdns.init $(1)/etc/init.d/mosdns
@@ -71,6 +74,7 @@ define Package/mosdns/install
 endef
 
 define Package/mosdns/conffiles
+/etc/config/mosdns
 /etc/mosdns/config.yaml
 endef
 

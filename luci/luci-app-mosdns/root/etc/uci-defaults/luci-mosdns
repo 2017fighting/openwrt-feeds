@@ -1,0 +1,31 @@
+#!/bin/sh
+#
+# luci-app-mosdns first-install wiring.
+#   - always owns the configfile pointer (this app manages config_custom.yaml)
+#   - enables the service + dnsmasq redirect ONCE (sentinel-guarded so later
+#     LuCI toggles survive luci-app upgrades)
+#   - registers ucitrack so UCI mosdns edits reload the init
+
+SENTINEL=/etc/.luci_app_mosdns
+
+uci set mosdns.config.configfile='/etc/mosdns/config_custom.yaml'
+
+if [ ! -f "$SENTINEL" ]; then
+	uci set mosdns.config.enabled='1'
+	uci set mosdns.config.redirect='1'
+	touch "$SENTINEL"
+fi
+
+uci -q commit mosdns
+
+if [ -f /etc/config/ucitrack ]; then
+	uci -q batch <<-EOF >/dev/null
+		delete ucitrack.@mosdns[-1]
+		add ucitrack mosdns
+		set ucitrack.@mosdns[-1].init=mosdns
+		commit ucitrack
+	EOF
+fi
+
+rm -rf /tmp/luci-*
+exit 0

@@ -1,0 +1,144 @@
+#!/usr/bin/env ucode
+#
+# rpcd backend for luci-app-mosdns (lean cfst_pool/lpush variant).
+# Methods (ACL-gated in /usr/share/rpcd/acl.d/luci-app-mosdns.json):
+#   print_log       tail the mosdns log (path resolved from the YAML)
+#   clean_log       truncate the mosdns log
+#   get_cfst_status read cfst_pool.json cache + parse cfst_pool args from the YAML
+#   reprobe         SIGUSR1 -> immediate cfst_pool rescan (no restart)
+
+'use strict';
+
+import { popen, writefile, readfile, stat } from 'fs';
+import { cursor } from 'uci';
+import { parse as json_parse } from 'json';
+
+function exec_sys(cmd) {
+	let p = popen(cmd + " 2>&1", "r");
+	if (!p) return { code: -1, stdout: "" };
+	let stdout = p.read("all");
+	let code = p.close();
+	if (type(stdout) == 'string') {
+		stdout = replace(stdout, /^\s+|\s+$/g, '');
+	}
+	return { code: code, stdout: stdout || "" };
+}
+
+# Active mosdns config file (UCI mosdns.config.configfile, default config_custom.yaml).
+function config_path() {
+	let c = cursor();
+	c.load('mosdns');
+	let p = c.get('mosdns', 'config', 'configfile');
+	return (p && p != '') ? p : '/etc/mosdns/config_custom.yaml';
+}
+
+# Log path: read the `file:` field from the YAML; fall back to /var/log/mosdns.log.
+function get_logfile_path_internal() {
+	let conf = config_path();
+	let content = readfile(conf);
+	if (content) {
+		let m = match(content, /file:[ \t]*([^\r\n]+)/);
+		if (m && m[1]) {
+			let log_path = replace(m[1], /^\s+|\s+$/g, '');
+			log_path = replace(log_path, /^["']|["']$/g, '');
+			if (log_path != "") return log_path;
+		}
+	}
+	return '/var/log/mosdns.log';
+}
+
+# First capture group of `re` against `s`, trimmed; null if no match.
+function pick(s, re) {
+	let m = match(s, re);
+	if (!m || !m[1]) return null;
+	return replace(m[1], /^[ \t]+|[ \t]+$/g, '');
+}
+
+# Extract the `cfst_pool` plugin block from the YAML (up to the next sibling plugin).
+function cfst_block(yaml) {
+	let m = match(yaml, /\n[ \t]+-[ \t]+tag:[ \t]*cfst_pool\b[\s\S]*?(?=\n[ \t]+-[ \t]+tag:|$)/);
+	return m ? m[0] : '';
+}
+
+const methods = {
+	print_log: {
+		call: function() {
+			try {
+				let path = get_logfile_path_internal();
+				if (path && stat(path)) {
+					return { log: readfile(path) };
+				}
+				return { error: 'Log file not accessible or does not exist.' };
+			} catch (e) {
+				return { error: String(e) };
+			}
+		}
+	},
+
+	clean_log: {
+		call: function() {
+			try {
+				let path = get_logfile_path_internal();
+				if (path) {
+					writefile(path, '');
+					return { success: true };
+				}
+				return { error: 'Log file path could not be determined.' };
+			} catch (e) {
+				return { error: String(e) };
+			}
+		}
+	},
+
+	get_cfst_status: {
+		call: function() {
+			try {
+				let conf = config_path();
+				let yaml = readfile(conf) || '';
+				let block = cfst_block(yaml);
+
+				let cache_file = pick(block, /cache_file:[ \t]*"?([^\r\n"]+)/) || '/etc/mosdns/cfst_pool.json';
+
+				let cache = null;
+				if (stat(cache_file)) {
+					let raw = readfile(cache_file);
+					if (raw) {
+						try { cache = json_parse(raw); } catch (e) { cache = null; }
+					}
+				}
+
+				return {
+					configfile: conf,
+					cache_file: cache_file,
+					params: {
+						download_url: pick(block, /download_url:[ \t]*"?([^\r\n"]+)/),
+						port: pick(block, /[ \t]port:[ \t]*([0-9]+)/),
+						top_n: pick(block, /top_n:[ \t]*([0-9]+)/),
+						refresh_interval: pick(block, /refresh_interval:[ \t]*([0-9]+)/),
+						sample_mode: pick(block, /sample_mode:[ \t]*([A-Za-z0-9_]+)/)
+					},
+					cache: cache
+				};
+			} catch (e) {
+				return { error: String(e) };
+			}
+		}
+	},
+
+	reprobe: {
+		call: function() {
+			try {
+				let pid = exec_sys('pidof mosdns').stdout;
+				if (!pid) {
+					return { success: false, error: 'mosdns is not running' };
+				}
+				let res = exec_sys('kill -USR1 ' + pid);
+				return { success: res.code === 0, output: res.stdout };
+			} catch (e) {
+				return { success: false, error: String(e) };
+			}
+		}
+	}
+};
+
+return { "luci.mosdns": methods };
