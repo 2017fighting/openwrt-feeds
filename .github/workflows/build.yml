@@ -176,16 +176,16 @@ jobs:
             echo "(exec smoke skipped: ${{ matrix.goarch }} binary on amd64 runner)"
           fi
 
-      - name: Stage all-arch luci-app apk into the arch feed dir
+      - name: Verify luci-app-mosdns apk landed in the arch feed dir
         run: |
           SDK="$GITHUB_WORKSPACE/sdk"
           OUT="$SDK/bin/packages/${{ matrix.arch }}/$FEED_NAME"
-          mkdir -p "$OUT"
-          # luci-app-mosdns is PKGARCH:=all and may land outside the per-arch
-          # feed dir; copy it in so it is indexed + signed with this arch's
-          # packages.adb (both matrix jobs do this -> both slices carry it).
-          find "$SDK/bin/packages" -type f -name 'luci-app-mosdns-*.apk' -exec cp -f {} "$OUT/" \;
-          echo "--- staged luci-app apk ---"; ls -l "$OUT"/luci-app-mosdns-*.apk 2>/dev/null || true
+          # The apk SDK packages the PKGARCH:=all luci-app directly into each
+          # arch feed dir, so it is indexed + signed with this arch's
+          # packages.adb (both matrix jobs -> both slices carry it). Assert it
+          # is present before indexing; fail loudly if a future SDK change
+          # regresses this.
+          ls -l "$OUT"/luci-app-mosdns-*.apk
 
       - name: Generate repository index
         working-directory: ${{ github.workspace }}/sdk
