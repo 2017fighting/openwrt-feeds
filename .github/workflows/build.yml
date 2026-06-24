@@ -206,9 +206,17 @@ jobs:
           # .sig file). This is how the OpenWrt buildbot signs indexes:
           #   apk adbsign --allow-untrusted --sign-key <key> packages.adb
           "$APK" adbsign --allow-untrusted --sign-key "$SDK/private-key.pem" "$OUT/packages.adb"
-          # Assert the index verifies against OUR public key before publishing.
-          "$APK" adbverify --verify-key "$SDK/public-key.pem" "$OUT/packages.adb" \
-            || { echo "::error::packages.adb failed signature verification with our key"; exit 1; }
+          # Prove a device can trust it: fetch the index with ONLY our public key
+          # in the keyring (no --allow-untrusted). If the embedded signature is
+          # missing or not signed by our key, apk rejects the repository here.
+          # (adbverify's option set is undocumented/flag-dependent across apk
+          # versions; this device-equivalent check is version-independent.)
+          VR="$SDK/apk-verify"
+          rm -rf "$VR"; mkdir -p "$VR/etc/apk/keys"
+          cp "$SDK/public-key.pem" "$VR/etc/apk/keys/openwrt-feeds.pem"
+          "$APK" --root "$VR" --keys-dir "$VR/etc/apk/keys" \
+                 --repository "file://${OUT}" update \
+            || { echo "::error:: apk rejected the signed index - signature not trusted by our key"; exit 1; }
           echo "--- feed dir ---"; ls -l "$OUT"
 
       - name: Assemble site slice
