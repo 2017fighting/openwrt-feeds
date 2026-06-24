@@ -214,8 +214,10 @@ jobs:
           VR="$SDK/apk-verify"
           rm -rf "$VR"; mkdir -p "$VR/etc/apk/keys"
           cp "$SDK/public-key.pem" "$VR/etc/apk/keys/openwrt-feeds.pem"
+          # --initdb bootstraps the apk db in the throwaway root; without it apk
+          # aborts with "Failed to open apk database" before checking the sig.
           "$APK" --root "$VR" --keys-dir "$VR/etc/apk/keys" \
-                 --repository "file://${OUT}" update \
+                 --repository "file://${OUT}" --initdb update \
             || { echo "::error:: apk rejected the signed index - signature not trusted by our key"; exit 1; }
           echo "--- feed dir ---"; ls -l "$OUT"
 
