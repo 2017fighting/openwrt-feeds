@@ -1,39 +1,47 @@
 #!/usr/bin/env sh
-# Generate the usign ed25519 keypair used to sign this feed's apk index
-# (packages.adb -> packages.adb.sig), matching how official OpenWrt signs repos.
+# Generate the openssl EC (prime256v1 / NIST P-256) keypair used to sign this
+# feed's apk index. This matches how official OpenWrt signs its apk repos:
 #
-# Creates in the repo root:
-#   key-build       PRIVATE key -> base64 into GitHub secret APK_SIGN_KEY, then delete.
-#   key-build.pub   PUBLIC key  -> moved to keys/key-build.pub and committed.
+#   private-key.pem        PRIVATE (-----BEGIN EC PRIVATE KEY-----)
+#                          -> base64 into GitHub secret APK_SIGN_KEY, then delete.
+#   keys/openwrt-feeds.pem PUBLIC  (-----BEGIN PUBLIC KEY-----)
+#                          -> committed; devices install it into /etc/apk/keys/.
 #
-# Requires `usign` on PATH, OR `docker` (builds usign in a throwaway container).
-# If neither is available, run the 'keygen' workflow in GitHub Actions instead.
+# The index is signed in CI with:  apk adbsign --sign-key private-key.pem packages.adb
+# (the signature is embedded in packages.adb; there is no separate .sig file).
+#
+# Requires only `openssl` (libopenssl on macOS, openssl on Linux). No usign.
+# Alternatively, run the 'keygen' workflow in GitHub Actions.
 set -eu
 cd "$(dirname "$0")/.."
 
-if command -v usign >/dev/null 2>&1; then
-  usign -G -s key-build -p key-build.pub -c "openwrt-feeds"
-elif command -v docker >/dev/null 2>&1; then
-  echo "usign not found; building it in a throwaway Docker container..." >&2
-  docker run --rm -v "$PWD":/out alpine:3.20 sh -c '
-    set -e
-    apk add --no-cache build-base cmake git libsodium-dev >/dev/null
-    cd /tmp && git clone --depth=1 https://github.com/openwrt/usign.git >/dev/null
-    cd usign && cmake -B build >/dev/null 2>&1 && cmake --build build -j"$(nproc)" >/dev/null 2>&1
-    ./build/usign -G -s /out/key-build -p /out/key-build.pub -c "openwrt-feeds"
-  '
-else
-  echo "Need 'usign' or 'docker'. Or run the 'keygen' GitHub Actions workflow." >&2
+command -v openssl >/dev/null 2>&1 || { echo "Need 'openssl' on PATH." >&2; exit 1; }
+
+# Rotating the signing key is a breaking change for every installed device.
+# Refuse to clobber an existing public key unless FORCE=1 is set.
+if [ -f keys/openwrt-feeds.pem ] && [ "${FORCE:-0}" != "1" ]; then
+  echo "::error:: keys/openwrt-feeds.pem already exists." >&2
+  echo "   Reusing it would NOT change the key. To generate a NEW key (rotation," >&2
+  echo "   breaking change), delete it first or re-run with:  FORCE=1 sh tooling/gen-key.sh" >&2
   exit 1
 fi
 
+# OpenWrt package/Makefile uses exactly these openssl commands:
+#   openssl ecparam -name prime256v1 -genkey -noout   (private)
+#   openssl ec -in <priv> -pubout                      (public)
+openssl ecparam -name prime256v1 -genkey -noout -out private-key.pem
 mkdir -p keys
-mv key-build.pub keys/key-build.pub
+openssl ec -in private-key.pem -pubout -out keys/openwrt-feeds.pem
+
+# Sanity: the public key must be a PEM SubjectPublicKeyInfo block.
+head -n1 keys/openwrt-feeds.pem | grep -q '^-----BEGIN PUBLIC KEY-----' \
+  || { echo "::error:: generated public key is not a -----BEGIN PUBLIC KEY----- PEM" >&2; exit 1; }
 
 echo
-echo "Public key  -> keys/key-build.pub   (commit this)"
-echo "Private key -> GitHub Actions secret APK_SIGN_KEY (base64 below); then delete key-build:"
+echo "Public key  -> keys/openwrt-feeds.pem   (commit this; devices put it in /etc/apk/keys/)"
+echo "Private key -> GitHub Actions secret APK_SIGN_KEY (base64 below); then delete private-key.pem:"
 echo
-base64 key-build
+base64 < private-key.pem | tr -d '\n'
 echo
-echo "After setting the secret:  rm key-build"
+echo
+echo "After setting the secret:  rm private-key.pem"

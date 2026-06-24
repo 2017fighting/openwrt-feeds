@@ -1,9 +1,12 @@
 name: keygen
 
-# One-time generator for the apk feed signing keypair (usign ed25519).
+# One-time generator for the apk feed signing keypair: an openssl EC
+# (prime256v1) key, matching how official OpenWrt signs apk indexes
+# (apk adbsign --sign-key <key> packages.adb).
+#
 # Run manually once (Actions -> keygen -> Run workflow). It prints the base64
 # private key (set as Actions secret APK_SIGN_KEY) and uploads the public key
-# (commit as keys/key-build.pub). Nothing is persisted in the repo.
+# (commit as keys/openwrt-feeds.pem). Nothing is persisted in the repo.
 on:
   workflow_dispatch:
 
@@ -12,37 +15,36 @@ permissions:
 
 jobs:
   keygen:
-    name: Generate usign keypair
+    name: Generate openssl EC apk keypair
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo (metadata only)
         uses: actions/checkout@v4
 
-      - name: Download OpenWrt SDK (for its bundled usign binary)
-        run: |
-          mkdir -p sdk
-          url="https://downloads.openwrt.org/releases/25.12.4/targets/x86/64/openwrt-sdk-25.12.4-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst"
-          curl -fL "$url" -o sdk.tar.zst
-          tar -I zstd -xf sdk.tar.zst -C sdk --strip-components=1
-          test -x sdk/staging_dir/host/bin/usign
-
       - name: Generate keypair
         run: |
-          ./sdk/staging_dir/host/bin/usign -G -s key-build -p key-build.pub -c "openwrt-feeds"
+          # Same commands OpenWrt's package/Makefile uses to create BUILD_KEY_APK_*.
+          openssl ecparam -name prime256v1 -genkey -noout -out private-key.pem
+          openssl ec -in private-key.pem -pubout -out openwrt-feeds.pem
+
+          head -n1 openwrt-feeds.pem | grep -q '^-----BEGIN PUBLIC KEY-----' \
+            || { echo "public key is not a -----BEGIN PUBLIC KEY----- PEM"; exit 1; }
+
           echo "=============================================================="
-          echo " PUBLIC KEY  -> commit as  keys/key-build.pub"
+          echo " PUBLIC KEY  -> commit as  keys/openwrt-feeds.pem"
           echo "=============================================================="
-          cat key-build.pub
+          cat openwrt-feeds.pem
           echo "=============================================================="
           echo " PRIVATE KEY (base64) -> Actions secret  APK_SIGN_KEY"
-          echo " (copy the line below, including no whitespace)"
+          echo " (copy the single line below, no whitespace)"
           echo "=============================================================="
-          base64 key-build
+          base64 < private-key.pem | tr -d '\n'
+          echo
           echo "=============================================================="
 
       - name: Upload public key artifact
         uses: actions/upload-artifact@v4
         with:
           name: signing-pubkey
-          path: key-build.pub
+          path: openwrt-feeds.pem
           retention-days: 1

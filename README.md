@@ -15,9 +15,9 @@ This repository is **both** the source feed (OpenWrt package `Makefile`s on
 ## Install on a 25.12.4 x86_64 device
 
 ```sh
-# 1. Trust this feed's signing key (usign public key; apk reads all of /etc/apk/keys/)
-wget -O /etc/apk/keys/openwrt-feeds.pub \
-  https://raw.githubusercontent.com/2017fighting/openwrt-feeds/main/keys/key-build.pub
+# 1. Trust this feed's signing key (apk EC public key; apk reads all of /etc/apk/keys/)
+wget -O /etc/apk/keys/openwrt-feeds.pem \
+  https://raw.githubusercontent.com/2017fighting/openwrt-feeds/main/keys/openwrt-feeds.pem
 
 # 2. Add the repository (point at the directory; apk fetches <url>/packages.adb)
 echo 'https://2017fighting.github.io/openwrt-feeds/25.12.4/x86_64' \
@@ -43,11 +43,14 @@ For a custom firmware image (ASU / imagebuilder), point the additional feed URL
 ## Signing
 
 Only the repository index (`packages.adb`) is signed — apk never signs
-individual `.apk` files. The signature is a **usign ed25519** detached signature
-(`packages.adb.sig`), matching how official OpenWrt signs its repos.
+individual `.apk` files. The signature is an **openssl EC (prime256v1 / NIST
+P-256)** signature embedded directly in `packages.adb` (there is no separate
+`.sig` file), produced with `apk adbsign --sign-key` — exactly how official
+OpenWrt signs its apk repos.
 
-- Public key: [`keys/key-build.pub`](keys/key-build.pub) — install into `/etc/apk/keys/`.
-- Private key (`key-build`): stored only as the GitHub Actions secret
+- Public key: [`keys/openwrt-feeds.pem`](keys/openwrt-feeds.pem)
+  (`-----BEGIN PUBLIC KEY-----`) — install into `/etc/apk/keys/`.
+- Private key (`private-key.pem`): stored only as the GitHub Actions secret
   `APK_SIGN_KEY`; never committed. The key is permanent — rotating it is a
   breaking change (every installed device must add the new public key).
 
@@ -66,7 +69,7 @@ dispatch):
 
 ```
 net/mosdns/          # the mosdns package (Makefile + default config + init script)
-keys/                # usign public signing key (committed; private key is a CI secret)
+keys/                # apk EC public signing key (committed; private key is a CI secret)
 tooling/             # keygen helper (tooling/gen-key.sh)
 feeds.config         # supported feeds (version x arch) — drives the build matrix
 .github/workflows/   # CI: build, sign, publish

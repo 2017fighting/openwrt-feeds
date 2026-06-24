@@ -9,13 +9,13 @@ that compiles, signs, and publishes a **binary apk feed** to GitHub Pages.
 - OpenWrt **25.12.4 is APK-based** (`.apk` + `packages.adb`). Only the index is signed.
 
 ## Local helpers
-- `sh tooling/gen-key.sh`            # one-time usign keypair (privkey -> secret APK_SIGN_KEY)
+- `sh tooling/gen-key.sh`            # one-time openssl EC apk signing keypair (privkey -> secret APK_SIGN_KEY)
 - `sh tooling/make-index.sh site`    # regenerate Pages index.html (optional `SITE_BASE=...`)
 
 ## Layout / conventions
 - `net/<pkg>/Makefile`     — apk package definitions (the source feed)
 - `feeds.config`           — JSON; drives the build matrix (`openwrt_version` x `arch`). Edit here to add an arch.
-- `keys/key-build.pub`     — feed signing public key (committed); the private key is the `APK_SIGN_KEY` secret
+- `keys/openwrt-feeds.pem` — apk signing public key (EC PEM `-----BEGIN PUBLIC KEY-----`, committed); the private key is the `APK_SIGN_KEY` secret
 - `.github/workflows/`     — `build.yml` (build+sign+deploy), `keygen.yml` (one-time keypair)
 - Adding a package: drop `<category>/<pkg>/Makefile` at the repo root; push.
 - Adding an arch: append to `feeds.config` (the workflow reads it via `jq`).
@@ -25,4 +25,4 @@ that compiles, signs, and publishes a **binary apk feed** to GitHub Pages.
   Its Go source is **not** in this repo; the SDK fetches it by tag (CI pre-places it in `dl/`).
 - In CI: run `make defconfig` before package compile (no TTY); pre-fetch the source into `dl/`.
 - `PKGARCH` auto-detects the SDK target arch; `MOSDNS_GOARCH` is passed from the matrix.
-- usign keypair is permanent — rotating it is a breaking change for every installed device.
+- apk EC signing keypair (openssl prime256v1) is permanent — rotating it is a breaking change for every installed device. apk embeds the index signature in `packages.adb` via `apk adbsign --sign-key` (no separate `.sig`).
