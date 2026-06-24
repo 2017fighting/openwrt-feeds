@@ -1,17 +1,25 @@
-#!/usr/bin/env ucode
-#
-# rpcd backend for luci-app-mosdns (lean cfst_pool/lpush variant).
-# Methods (ACL-gated in /usr/share/rpcd/acl.d/luci-app-mosdns.json):
-#   print_log       tail the mosdns log (path resolved from the YAML)
-#   clean_log       truncate the mosdns log
-#   get_cfst_status read cfst_pool.json cache + parse cfst_pool args from the YAML
-#   reprobe         SIGUSR1 -> immediate cfst_pool rescan (no restart)
+// rpcd backend for luci-app-mosdns (lean cfst_pool/lpush variant).
+//
+// IMPORTANT: ucode line comments are `//`, NOT shell-style `#`. rpcd compiles
+// this file as a ucode module (no shebang stripping, no `#` comments), so a
+// `#!/usr/bin/env ucode` line or any `# ...` comment is a hard syntax error
+// that makes rpcd silently drop the object — and every frontend rpc call
+// (get_cfst_status, print_log) then 404s. Keep comments `//`.
+//
+// Methods (ACL-gated in /usr/share/rpcd/acl.d/luci-app-mosdns.json):
+//   print_log       tail the mosdns log (path resolved from the YAML)
+//   clean_log       truncate the mosdns log
+//   get_cfst_status read cfst_pool.json cache + parse cfst_pool args from the YAML
+//   reprobe         SIGUSR1 -> immediate cfst_pool rescan (no restart)
 
 'use strict';
 
 import { popen, writefile, readfile, stat } from 'fs';
 import { cursor } from 'uci';
-import { parse as json_parse } from 'json';
+
+// `json` is a global function on this ucode build (not an importable module):
+//   cache = json(rawString)
+// Importing `{ parse } from 'json'` fails to resolve and breaks rpcd loading.
 
 function exec_sys(cmd) {
 	let p = popen(cmd + " 2>&1", "r");
@@ -24,7 +32,7 @@ function exec_sys(cmd) {
 	return { code: code, stdout: stdout || "" };
 }
 
-# Active mosdns config file (UCI mosdns.config.configfile, default config_custom.yaml).
+// Active mosdns config file (UCI mosdns.config.configfile, default config_custom.yaml).
 function config_path() {
 	let c = cursor();
 	c.load('mosdns');
@@ -32,7 +40,7 @@ function config_path() {
 	return (p && p != '') ? p : '/etc/mosdns/config_custom.yaml';
 }
 
-# Log path: read the `file:` field from the YAML; fall back to /var/log/mosdns.log.
+// Log path: read the `file:` field from the YAML; fall back to /var/log/mosdns.log.
 function get_logfile_path_internal() {
 	let conf = config_path();
 	let content = readfile(conf);
@@ -47,17 +55,29 @@ function get_logfile_path_internal() {
 	return '/var/log/mosdns.log';
 }
 
-# First capture group of `re` against `s`, trimmed; null if no match.
+// First capture group of `re` against `s`, trimmed; null if no match.
 function pick(s, re) {
 	let m = match(s, re);
 	if (!m || !m[1]) return null;
 	return replace(m[1], /^[ \t]+|[ \t]+$/g, '');
 }
 
-# Extract the `cfst_pool` plugin block from the YAML (up to the next sibling plugin).
+// Extract the `cfst_pool` plugin block from the YAML, line by line, stopping
+// at the next sibling `- tag:` plugin. Done this way because this ucode regex
+// engine won't cross newlines with [\s\S]* or .*/s, and bounding at the next
+// plugin keeps pick() values (port, top_n, ...) from leaking into siblings.
 function cfst_block(yaml) {
-	let m = match(yaml, /\n[ \t]+-[ \t]+tag:[ \t]*cfst_pool\b[\s\S]*?(?=\n[ \t]+-[ \t]+tag:|$)/);
-	return m ? m[0] : '';
+	let lines = split(yaml, "\n");
+	let block = '';
+	let inblock = false;
+	for (let i = 0; i < length(lines); i++) {
+		let line = lines[i];
+		if (match(line, /^[ \t]*-[ \t]+tag:/)) {
+			inblock = match(line, /tag:[ \t]*cfst_pool/) ? true : false;
+		}
+		if (inblock) block += line + "\n";
+	}
+	return block;
 }
 
 const methods = {
@@ -103,7 +123,7 @@ const methods = {
 				if (stat(cache_file)) {
 					let raw = readfile(cache_file);
 					if (raw) {
-						try { cache = json_parse(raw); } catch (e) { cache = null; }
+						try { cache = json(raw); } catch (e) { cache = null; }
 					}
 				}
 

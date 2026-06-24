@@ -27,5 +27,14 @@ if [ -f /etc/config/ucitrack ]; then
 	EOF
 fi
 
+# Boot-enroll the init unconditionally (writes the S99 rc.d symlink — safe even
+# inside the image-build chroot). Start mosdns right now on a live device when
+# it isn't already running, closing the "installed but not running until a
+# reboot" gap without restarting a healthy service on upgrades.
+/etc/init.d/mosdns enable >/dev/null 2>&1
+if [ -z "$IPKG_INSTROOT" ] && ! pidof mosdns >/dev/null 2>&1; then
+	/etc/init.d/mosdns start >/dev/null 2>&1
+fi
+
 rm -rf /tmp/luci-*
 exit 0

@@ -102,6 +102,33 @@ return view.extend({
 
 		// YAML editor — config_custom.yaml is the source of truth.
 		let configeditor = null;
+
+		// CodeMirror's default theme hardcodes a white background + black text,
+		// which clashes with the active LuCI theme (badly on dark themes, and
+		// looks unstyled on light ones). Probe the theme's own textarea styling
+		// and mirror it onto the editor so it always blends in.
+		function adaptCodeMirrorTheme(cm) {
+			const probe = document.createElement('textarea');
+			probe.className = 'cbi-input-textarea';
+			probe.style.cssText = 'position:absolute;visibility:hidden;';
+			document.body.appendChild(probe);
+			const s = getComputedStyle(probe);
+			const bg = s.backgroundColor, fg = s.color, bd = s.borderColor;
+			probe.remove();
+
+			const rules = [
+				(bg && bg !== 'rgba(0, 0, 0, 0)') ? `.cbi-map .CodeMirror, .cbi-map .CodeMirror-scroll, .cbi-map .CodeMirror-gutters { background-color: ${bg} !important; }` : null,
+				fg ? `.cbi-map .CodeMirror { color: ${fg} !important; }` : null,
+				fg ? `.cbi-map .CodeMirror-linenumber { color: ${fg} !important; opacity: .5; }` : null,
+				fg ? `.cbi-map .CodeMirror-cursor { border-left-color: ${fg} !important; }` : null,
+				`.cbi-map .CodeMirror-activeline-background { background: rgba(127,127,127,.15) !important; }`,
+				bd ? `.cbi-map .CodeMirror { border: 1px solid ${bd} !important; }` : null
+			].filter(Boolean);
+			const style = document.createElement('style');
+			style.textContent = rules.join('\n');
+			document.head.appendChild(style);
+		}
+
 		setTimeout(() => {
 			const textarea = document.getElementById('widget.cbid.mosdns.config._custom');
 			if (textarea) {
@@ -115,6 +142,7 @@ return view.extend({
 					mode: 'text/yaml',
 					styleActiveLine: true
 				});
+				adaptCodeMirrorTheme(configeditor);
 			}
 		}, 600);
 
