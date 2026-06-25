@@ -3,6 +3,7 @@
 'require fs';
 'require poll';
 'require rpc';
+'require uci';
 'require ui';
 'require view';
 
@@ -60,11 +61,22 @@ async function loadCodeMirrorResources() {
 }
 
 return view.extend({
+	load() {
+		// Resolve the active config file once from UCI (mosdns.config.configfile)
+		// so the editor below follows whatever the "Config File" field is set to,
+		// instead of always reading/writing config_custom.yaml.
+		return uci.load('mosdns').then(() => {
+			this.configPath = uci.get('mosdns', 'config', 'configfile')
+				|| '/etc/mosdns/config_custom.yaml';
+		});
+	},
+
 	render() {
+		const configPath = this.configPath || '/etc/mosdns/config_custom.yaml';
 		let m, s, o;
 
 		m = new form.Map('mosdns', _('MosDNS'),
-			_('mosdns with in-process CloudflareSpeedTest (cfst_pool + lpush). Edit /etc/mosdns/config_custom.yaml directly below; Save writes the file and restarts mosdns.'));
+			_('mosdns with in-process CloudflareSpeedTest (cfst_pool + lpush). The editor below edits the file selected in "Config File"; Save writes it and restarts mosdns.'));
 
 		// Service status banner.
 		s = m.section(form.TypedSection);
@@ -100,7 +112,7 @@ return view.extend({
 		o.rmempty = false;
 		o.default = o.disabled;
 
-		// YAML editor — config_custom.yaml is the source of truth.
+		// YAML editor — edits the file named by the "Config File" field (configPath).
 		let configeditor = null;
 
 		// CodeMirror's default theme hardcodes a white background + black text,
@@ -147,22 +159,30 @@ return view.extend({
 		}, 600);
 
 		o = s.option(form.TextValue, '_custom', _('Configuration Editor'),
-			_('Direct edit of the mosdns pipeline. Save writes the file and restarts mosdns.'));
+			_('Edits the file selected in "Config File". Save writes it and restarts mosdns.'));
 		o.rows = 25;
-		o.cfgvalue = section_id => fs.trimmed('/etc/mosdns/config_custom.yaml');
+		o.cfgvalue = section_id => fs.trimmed(configPath).catch(() => '');
+
 		o.write = function(section_id, formvalue) {
-			if (configeditor) {
-				const editorContent = configeditor.getValue();
-				if (editorContent === formvalue) {
-					return;
-				}
-				return fs.write('/etc/mosdns/config_custom.yaml', editorContent.trim().replace(/\r\n/g, '\n') + '\n')
-					.then(() => fs.exec('/etc/init.d/mosdns', ['restart']))
-					.then(() => window.location.reload())
-					.catch(e => {
-						ui.addNotification(null, E('p', _('Unable to save contents: %s').format(e.message)));
-					});
-			}
+			if (!configeditor)
+				return;
+
+			const editorContent = configeditor.getValue();
+			if (editorContent === formvalue)
+				return;
+
+			// Follow the "Config File" field: read its live value from the DOM so
+			// changing the path and saving in one pass writes to the newly selected
+			// file, falling back to the UCI value resolved at load time.
+			const input = document.getElementById('widget.cbid.mosdns.config.configfile');
+			const target = (input && input.value && input.value.trim()) || configPath;
+
+			return fs.write(target, editorContent.trim().replace(/\r\n/g, '\n') + '\n')
+				.then(() => fs.exec('/etc/init.d/mosdns', ['restart']))
+				.then(() => window.location.reload())
+				.catch(e => {
+					ui.addNotification(null, E('p', _('Unable to save contents: %s').format(e.message)));
+				});
 		};
 
 		return m.render();
