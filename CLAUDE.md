@@ -21,7 +21,7 @@ that compiles, signs, and publishes a **binary apk feed** to GitHub Pages.
 - Adding an arch: append to `feeds.config` (the workflow reads it via `jq`).
 
 ## Notes
-- `mosdns` is pure Go (CGO=0), cross-compiled with host Go, pinned to **v5.4.1**.
+- `mosdns` is pure Go (CGO=0), cross-compiled with host Go, pinned to **v5.5.0**.
   Its Go source is **not** in this repo; the SDK fetches it by tag (CI pre-places it in `dl/`).
 - In CI: run `make defconfig` before package compile (no TTY); pre-fetch the source into `dl/`.
 - `PKGARCH` auto-detects the SDK target arch; `MOSDNS_GOARCH` is passed from the matrix.

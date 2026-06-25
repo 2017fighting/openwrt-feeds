@@ -156,9 +156,9 @@ jobs:
           # The SDK's default fetcher only probes the OpenWrt source mirrors
           # (which 404 for a custom package). Pre-populate dl/ with the exact
           # tarball the Makefile declares; PKG_HASH verifies it.
-          curl -fL "https://github.com/2017fighting/mosdns/archive/refs/tags/v5.4.1.tar.gz" \
-            -o "$GITHUB_WORKSPACE/sdk/dl/mosdns-5.4.1.tar.gz"
-          echo "sha256: $(sha256sum "$GITHUB_WORKSPACE/sdk/dl/mosdns-5.4.1.tar.gz" | cut -d' ' -f1)"
+          curl -fL "https://github.com/2017fighting/mosdns/archive/refs/tags/v5.5.0.tar.gz" \
+            -o "$GITHUB_WORKSPACE/sdk/dl/mosdns-5.5.0.tar.gz"
+          echo "sha256: $(sha256sum "$GITHUB_WORKSPACE/sdk/dl/mosdns-5.5.0.tar.gz" | cut -d' ' -f1)"
 
       - name: Build mosdns
         working-directory: ${{ github.workspace }}/sdk

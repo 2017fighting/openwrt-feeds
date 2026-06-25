@@ -12,14 +12,14 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=mosdns
-PKG_VERSION:=5.4.1
-PKG_RELEASE:=2
+PKG_VERSION:=5.5.0
+PKG_RELEASE:=1
 
 # Source: GitHub source archive of the fork's pinned tag. PKG_HASH pins it.
 # The archive extracts to mosdns-<version>, matching the default PKG_BUILD_DIR.
 PKG_SOURCE:=mosdns-$(PKG_VERSION).tar.gz
 PKG_SOURCE_URL:=https://github.com/2017fighting/mosdns/archive/refs/tags/v$(PKG_VERSION).tar.gz
-PKG_HASH:=262cc4999d01b87997a35a4330b0363009145638a0d13c3b33f7a87b93d7ea7a
+PKG_HASH:=b6a8b337e7b179edc935ac32ca366f9ca935b8aa425b88ba0040cdc360dd8adb
 
 PKG_LICENSE:=GPL-3.0
 PKG_LICENSE_FILES:=LICENSE
