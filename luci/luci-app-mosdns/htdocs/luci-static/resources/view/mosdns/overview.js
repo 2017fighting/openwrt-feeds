@@ -62,17 +62,17 @@ async function loadCodeMirrorResources() {
 
 return view.extend({
 	load() {
-		// Resolve the active config file once from UCI (mosdns.config.configfile)
-		// so the editor below follows whatever the "Config File" field is set to,
-		// instead of always reading/writing config_custom.yaml.
-		return uci.load('mosdns').then(() => {
-			this.configPath = uci.get('mosdns', 'config', 'configfile')
-				|| '/etc/mosdns/config_custom.yaml';
-		});
+		// Prime the shared uci cache so render() can read the configured
+		// config file synchronously. Don't stash the path on `this` inside a
+		// load() callback — that depends on this-binding across load/render
+		// and silently falls back to the default; read uci.get() directly in
+		// render() instead (the standard LuCI view idiom).
+		return uci.load('mosdns');
 	},
 
 	render() {
-		const configPath = this.configPath || '/etc/mosdns/config_custom.yaml';
+		const configPath = uci.get('mosdns', 'config', 'configfile')
+			|| '/etc/mosdns/config_custom.yaml';
 		let m, s, o;
 
 		m = new form.Map('mosdns', _('MosDNS'),
