@@ -43,13 +43,26 @@ uci_set_or_del() {
 	local key="$1"
 	local val="$2"
 	if [ -n "$val" ]; then
-		uci set "$key=$val"
+		uci -q set "$key=$val"
 	else
-		uci del "$key"
+		uci -q del "$key"
 	fi
 }
 
+# Whether /etc/config/dhcp exposes a dnsmasq section to redirect through.
+# Every raw `uci dhcp.@dnsmasq[0]...` call below prints "uci: Entry not found"
+# if it is missing, so the whole redirect path is skipped when dnsmasq is
+# absent instead of erroring on every start/reload.
+dnsmasq_present() {
+	[ -n "$(uci -q get dhcp.@dnsmasq[0])" ]
+}
+
 dhcp_setting() {
+	dnsmasq_present || {
+		logger -t mosdns "DNS redirect skipped: no dnsmasq section in /etc/config/dhcp"
+		return 0
+	}
+
 	[ ! -f "$REDIRECT_LOCK_FILE" ] && {
 		printf "rebind_protection=$(uci -q get dhcp.@dnsmasq[0].rebind_protection)\n"
 		printf "rebind_localhost=$(uci -q get dhcp.@dnsmasq[0].rebind_localhost)\n"
@@ -58,28 +71,30 @@ dhcp_setting() {
 		printf "cachesize=$(uci -q get dhcp.@dnsmasq[0].cachesize)\n"
 	} > $REDIRECT_LOCK_FILE
 
-	sed -i "/list server/d" /etc/config/dhcp
-	uci add_list dhcp.@dnsmasq[0].server="127.0.0.1#$(listen_port)"
-	uci set dhcp.@dnsmasq[0].rebind_protection='0'
-	uci set dhcp.@dnsmasq[0].noresolv="1"
-	uci set dhcp.@dnsmasq[0].cachesize='0'
-	uci commit dhcp
+	# Clear any prior server entry (scalar or list) so add_list starts clean.
+	sed -i "/\(list\|option\) server/d" /etc/config/dhcp
+	uci -q add_list dhcp.@dnsmasq[0].server="127.0.0.1#$(listen_port)"
+	uci -q set dhcp.@dnsmasq[0].rebind_protection='0'
+	uci -q set dhcp.@dnsmasq[0].noresolv="1"
+	uci -q set dhcp.@dnsmasq[0].cachesize='0'
+	uci -q commit dhcp
 }
 
 restore_dhcp_setting() {
-	if [ -f "$REDIRECT_LOCK_FILE" ]; then
-		sed -i "/list server/d" /etc/config/dhcp
-		source "$REDIRECT_LOCK_FILE"
+	[ -f "$REDIRECT_LOCK_FILE" ] || return 0
+	dnsmasq_present || { rm -f "$REDIRECT_LOCK_FILE"; return 0; }
 
-		uci_set_or_del dhcp.@dnsmasq[0].rebind_protection "$rebind_protection"
-		uci_set_or_del dhcp.@dnsmasq[0].resolvfile "$resolvfile"
-		uci_set_or_del dhcp.@dnsmasq[0].rebind_localhost "$rebind_localhost"
-		uci_set_or_del dhcp.@dnsmasq[0].noresolv "$noresolv"
-		uci_set_or_del dhcp.@dnsmasq[0].cachesize "$cachesize"
+	sed -i "/\(list\|option\) server/d" /etc/config/dhcp
+	source "$REDIRECT_LOCK_FILE"
 
-		uci commit dhcp
-		rm -f "$REDIRECT_LOCK_FILE"
-	fi
+	uci_set_or_del dhcp.@dnsmasq[0].rebind_protection "$rebind_protection"
+	uci_set_or_del dhcp.@dnsmasq[0].resolvfile "$resolvfile"
+	uci_set_or_del dhcp.@dnsmasq[0].rebind_localhost "$rebind_localhost"
+	uci_set_or_del dhcp.@dnsmasq[0].noresolv "$noresolv"
+	uci_set_or_del dhcp.@dnsmasq[0].cachesize "$cachesize"
+
+	uci -q commit dhcp
+	rm -f "$REDIRECT_LOCK_FILE"
 }
 
 reload_dnsmasq() {

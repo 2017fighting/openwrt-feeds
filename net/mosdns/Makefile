@@ -13,7 +13,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=mosdns
 PKG_VERSION:=5.4.1
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 
 # Source: GitHub source archive of the fork's pinned tag. PKG_HASH pins it.
 # The archive extracts to mosdns-<version>, matching the default PKG_BUILD_DIR.
