@@ -44,11 +44,7 @@ define Package/natmapt
   CATEGORY:=Network
   TITLE:=TCP/UDP port mapping tool for full cone NAT
   URL:=https://github.com/heiher/natmap
-  # Plain (non-`+`) deps: standard OpenWrt packages every device already has in
-  # its own repos. Declared without `+` so this feed does NOT rebuild them —
-  # building curl/bash here would pull core libs (libopenssl/libncurses) that the
-  # minimal SDK defconfig does not select. apk still records them as runtime deps.
-  DEPENDS:=curl jsonfilter bash
+  DEPENDS:=+curl +jsonfilter +bash
 endef
 
 MAKE_FLAGS += REV_ID="$(PKG_VERSION)"

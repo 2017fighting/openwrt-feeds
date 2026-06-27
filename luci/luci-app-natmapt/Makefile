@@ -8,10 +8,7 @@ LUCI_NAME:=luci-app-natmapt
 
 LUCI_TITLE:=LuCI Support for natmap
 LUCI_PKGARCH:=all
-# coreutils-timeout is plain (no `+`): a standard package the device already
-# provides (busybox also ships `timeout`); we don't rebuild it. natmapt and
-# stuntman-client are `+` because THIS feed ships them.
-LUCI_DEPENDS:=+natmapt coreutils-timeout +stuntman-client
+LUCI_DEPENDS:=+natmapt +coreutils-timeout +stuntman-client
 
 LUCI_DESCRIPTION:=TCP/UDP port mapping for full cone NAT
 

@@ -162,8 +162,30 @@ jobs:
       - name: Generate non-interactive .config
         working-directory: ${{ github.workspace }}/sdk
         run: |
+          # Seed our packages + the choices the bare defconfig won't default-pick,
+          # then let defconfig propagate the rest. natmapt pulls +curl +bash
+          # +jsonfilter; curl needs a TLS backend (CONFIG_LIBCURL_OPENSSL ->
+          # libopenssl) and bash needs libncurses/libreadline. These are CORE libs
+          # the bare defconfig leaves unselected (and they aren't feed-resolvable),
+          # which made curl fail "TLS not detected" and bash fail "cannot find
+          # -lncurses" when built as natmapt's deps. Selecting the top-level
+          # packages + the curl TLS choice lets defconfig's select-propagation turn
+          # the core libs on. (Plain vs `+` DEPENDS doesn't change whether deps are
+          # built — OpenWrt builds both for a direct compile target.)
+          cat > .config <<'EOF'
+          CONFIG_PACKAGE_mosdns=y
+          CONFIG_PACKAGE_luci-app-mosdns=y
+          CONFIG_PACKAGE_natmapt=y
+          CONFIG_PACKAGE_luci-app-natmapt=y
+          CONFIG_PACKAGE_stuntman-client=y
+          CONFIG_PACKAGE_libcurl=y
+          CONFIG_LIBCURL_OPENSSL=y
+          CONFIG_PACKAGE_libopenssl=y
+          CONFIG_PACKAGE_libncurses=y
+          CONFIG_PACKAGE_libreadline=y
+          EOF
           make defconfig
-          grep -E 'CONFIG_PACKAGE_mosdns=' .config || echo 'mosdns not selected (direct compile target still builds it)'
+          grep -E 'CONFIG_PACKAGE_(libopenssl|libncurses|libcurl|bash)=' .config || true
 
       - name: Pre-fetch package sources into SDK dl/
         run: |
