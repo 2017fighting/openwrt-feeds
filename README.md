@@ -16,8 +16,8 @@ This repository is **both** the source feed (OpenWrt package `Makefile`s on
 
 ```sh
 # 1. Trust this feed's signing key (apk EC public key; apk reads all of /etc/apk/keys/)
-wget -O /etc/apk/keys/openwrt-feeds.pem \
-  https://raw.githubusercontent.com/2017fighting/openwrt-feeds/main/keys/openwrt-feeds.pem
+wget -O /etc/apk/keys/2017fighting.pem \
+  https://raw.githubusercontent.com/2017fighting/openwrt-feeds/main/keys/2017fighting.pem
 
 # 2. Add the repository (point at the directory; apk fetches <url>/packages.adb)
 echo 'https://2017fighting.github.io/openwrt-feeds/25.12.4/x86_64' \
@@ -50,7 +50,7 @@ P-256)** signature embedded directly in `packages.adb` (there is no separate
 `.sig` file), produced with `apk adbsign --sign-key` — exactly how official
 OpenWrt signs its apk repos.
 
-- Public key: [`keys/openwrt-feeds.pem`](keys/openwrt-feeds.pem)
+- Public key: [`keys/2017fighting.pem`](keys/2017fighting.pem)
   (`-----BEGIN PUBLIC KEY-----`) — install into `/etc/apk/keys/`.
 - Private key (`private-key.pem`): stored only as the GitHub Actions secret
   `APK_SIGN_KEY`; never committed. The key is permanent — rotating it is a

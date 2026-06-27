@@ -65,8 +65,8 @@ CSS
     printf '<h1>Index of <code>/%s</code></h1>\n' "$rel"
     printf '<p class="muted"><strong>openwrt-feeds</strong> — signed OpenWrt apk feed. '
     printf 'Repo: <a href="https://github.com/2017fighting/openwrt-feeds">2017fighting/openwrt-feeds</a>. '
-    printf 'Public key: <a href="%s/keys/openwrt-feeds.pem">keys/openwrt-feeds.pem</a>. '
-    printf 'Docs: <a href="%s/README.md">README.md</a>.</p>\n' "$SITE_BASE" "$SITE_BASE"
+    printf 'Public key: <a href="%s/keys/2017fighting.pem">2017fighting.pem</a>. ' "$SITE_BASE"
+    printf 'Docs: <a href="%s/README.md">README.md</a>.</p>\n' "$SITE_BASE"
 
     # File listing
     printf '<h2>Files</h2>\n'
@@ -99,10 +99,10 @@ CSS
       printf '</tbody></table>\n'
 
       repo_url="$SITE_BASE/$rel"
-      key_url="$SITE_BASE/keys/openwrt-feeds.pem"
+      key_url="$SITE_BASE/keys/2017fighting.pem"
       addlist=$(printf '%s\n' "$pkgs" | while IFS="$TAB" read -r name _; do [ -n "$name" ] && printf '%s ' "$name"; done)
       addlist="${addlist% }"
-      cmd="wget -O /etc/apk/keys/openwrt-feeds.pem ${key_url}
+      cmd="wget -O /etc/apk/keys/2017fighting.pem ${key_url}
 echo '${repo_url}' >> /etc/apk/repositories
 apk update && apk add ${addlist}"
       ce=$(printf '%s' "$cmd" | esc)

@@ -15,7 +15,7 @@ that compiles, signs, and publishes a **binary apk feed** to GitHub Pages.
 ## Layout / conventions
 - `net/<pkg>/Makefile`     — apk package definitions (the source feed)
 - `feeds.config`           — JSON; drives the build matrix (`openwrt_version` x `arch`). Edit here to add an arch.
-- `keys/openwrt-feeds.pem` — apk signing public key (EC PEM `-----BEGIN PUBLIC KEY-----`, committed); the private key is the `APK_SIGN_KEY` secret
+- `keys/2017fighting.pem` — apk signing public key (EC PEM `-----BEGIN PUBLIC KEY-----`, committed); the private key is the `APK_SIGN_KEY` secret
 - `.github/workflows/`     — `build.yml` (build+sign+deploy), `keygen.yml` (one-time keypair)
 - Adding a package: drop `<category>/<pkg>/Makefile` at the repo root; push.
 - Adding an arch: append to `feeds.config` (the workflow reads it via `jq`).

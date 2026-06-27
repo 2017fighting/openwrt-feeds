@@ -9,7 +9,7 @@ on:
       - 'net/**'
       - 'luci/**'
       - 'feeds.config'
-      - 'keys/openwrt-feeds.pem'
+      - 'keys/2017fighting.pem'
       - '.github/workflows/build.yml'
       - '.github/workflows/keygen.yml'
       - 'tooling/**'
@@ -103,7 +103,7 @@ jobs:
           APK_SIGN_KEY: ${{ secrets.APK_SIGN_KEY }}
         run: |
           [ -n "$APK_SIGN_KEY" ] || { echo "::error::Actions secret APK_SIGN_KEY is not set. Run tooling/gen-key.sh (or the 'keygen' workflow), then add the secret."; exit 1; }
-          [ -f keys/openwrt-feeds.pem ] || { echo "::error::keys/openwrt-feeds.pem is missing. Run tooling/gen-key.sh and commit the public key."; exit 1; }
+          [ -f keys/2017fighting.pem ] || { echo "::error::keys/2017fighting.pem is missing. Run tooling/gen-key.sh and commit the public key."; exit 1; }
 
       - name: Install signing keys into the SDK
         env:
@@ -116,7 +116,7 @@ jobs:
           # Place ours at those exact paths so 'make package/index' (apk mkndx
           # --sign) and our explicit 'apk adbsign' both use OUR key.
           printf '%s' "$APK_SIGN_KEY" | base64 -d > "$SDK/private-key.pem"
-          cp keys/openwrt-feeds.pem "$SDK/public-key.pem"
+          cp keys/2017fighting.pem "$SDK/public-key.pem"
           chmod 600 "$SDK/private-key.pem"
 
       - name: Register this repo as a feed (idempotent)
@@ -252,7 +252,7 @@ jobs:
       - name: Add public key + README to the site
         run: |
           mkdir -p site/keys
-          cp keys/openwrt-feeds.pem site/keys/openwrt-feeds.pem
+          cp keys/2017fighting.pem site/keys/2017fighting.pem
           cp README.md site/README.md
 
       - name: Generate browsable index.html (Pages has no directory autoindex)

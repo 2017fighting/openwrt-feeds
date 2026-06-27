@@ -6,7 +6,7 @@ name: keygen
 #
 # Run manually once (Actions -> keygen -> Run workflow). It prints the base64
 # private key (set as Actions secret APK_SIGN_KEY) and uploads the public key
-# (commit as keys/openwrt-feeds.pem). Nothing is persisted in the repo.
+# (commit as keys/2017fighting.pem). Nothing is persisted in the repo.
 on:
   workflow_dispatch:
 
@@ -25,15 +25,15 @@ jobs:
         run: |
           # Same commands OpenWrt's package/Makefile uses to create BUILD_KEY_APK_*.
           openssl ecparam -name prime256v1 -genkey -noout -out private-key.pem
-          openssl ec -in private-key.pem -pubout -out openwrt-feeds.pem
+          openssl ec -in private-key.pem -pubout -out 2017fighting.pem
 
-          head -n1 openwrt-feeds.pem | grep -q '^-----BEGIN PUBLIC KEY-----' \
+          head -n1 2017fighting.pem | grep -q '^-----BEGIN PUBLIC KEY-----' \
             || { echo "public key is not a -----BEGIN PUBLIC KEY----- PEM"; exit 1; }
 
           echo "=============================================================="
-          echo " PUBLIC KEY  -> commit as  keys/openwrt-feeds.pem"
+          echo " PUBLIC KEY  -> commit as  keys/2017fighting.pem"
           echo "=============================================================="
-          cat openwrt-feeds.pem
+          cat 2017fighting.pem
           echo "=============================================================="
           echo " PRIVATE KEY (base64) -> Actions secret  APK_SIGN_KEY"
           echo " (copy the single line below, no whitespace)"
@@ -46,5 +46,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: signing-pubkey
-          path: openwrt-feeds.pem
+          path: 2017fighting.pem
           retention-days: 1
