@@ -125,11 +125,12 @@ jobs:
         run: |
           SDK="$GITHUB_WORKSPACE/sdk"
           # The SDK ships feeds.conf.default (luci/packages/...) but no feeds.conf.
-          # Seed feeds.conf with the luci feed (luci.mk) that luci-app-mosdns builds
-          # against; luci-only to avoid cloning the large packages feed. Fall back to
-          # the full defaults if the luci line isn't found.
+          # Seed feeds.conf with luci (luci.mk that luci-app-* builds against) AND
+          # packages (curl/jsonfilter/bash for natmapt, coreutils-timeout for
+          # luci-app-natmapt — all runtime deps that OpenWrt builds from source).
+          # routing/telephony are still omitted to keep the clone lean.
           if [ ! -f "$SDK/feeds.conf" ]; then
-            awk '$2=="luci"{print}' "$SDK/feeds.conf.default" > "$SDK/feeds.conf" 2>/dev/null || true
+            awk '$2=="luci" || $2=="packages"{print}' "$SDK/feeds.conf.default" > "$SDK/feeds.conf" 2>/dev/null || true
             [ -s "$SDK/feeds.conf" ] || cp "$SDK/feeds.conf.default" "$SDK/feeds.conf"
           fi
           grep -qxF "src-link $FEED_NAME $GITHUB_WORKSPACE" "$SDK/feeds.conf" \
@@ -140,8 +141,20 @@ jobs:
         working-directory: ${{ github.workspace }}/sdk
         run: |
           ./scripts/feeds update -a
-          # luci-app-mosdns builds via feeds/luci/luci.mk (fetched by update -a).
-          ./scripts/feeds install mosdns luci-app-mosdns
+          # luci-app-mosdns / luci-app-natmapt build via feeds/luci/luci.mk (fetched
+          # by update -a). natmapt also defines 5 optional client/notify script
+          # sub-packages, listed explicitly so they ship in the binary feed.
+          # stuntman-client is a runtime dep of luci-app-natmapt (NAT type test);
+          # boost is listed explicitly because stuntman's PKG_BUILD_DEPENDS:=boost/host
+          # needs the boost feed package installed (triggers a host-boost build).
+          # feeds install pulls each package's runtime deps automatically (curl,
+          # jsonfilter, bash from packages; coreutils-timeout; libopenssl; etc.).
+          ./scripts/feeds install \
+            mosdns luci-app-mosdns \
+            natmapt luci-app-natmapt \
+            natmapt-client-script-transmission natmapt-client-script-deluge \
+            natmapt-notify-script-pushbullet natmapt-notify-script-pushover natmapt-notify-script-telegram \
+            stuntman-client boost
 
       # The SDK ships no usable .config for CI, so a package compile would
       # otherwise trigger the interactive `menuconfig` (mconf) and die with
@@ -152,15 +165,20 @@ jobs:
           make defconfig
           grep -E 'CONFIG_PACKAGE_mosdns=' .config || echo 'mosdns not selected (direct compile target still builds it)'
 
-      - name: Pre-fetch mosdns source into SDK dl/
+      - name: Pre-fetch package sources into SDK dl/
         run: |
           mkdir -p "$GITHUB_WORKSPACE/sdk/dl"
           # The SDK's default fetcher only probes the OpenWrt source mirrors
-          # (which 404 for a custom package). Pre-populate dl/ with the exact
-          # tarball the Makefile declares; PKG_HASH verifies it.
+          # (which 404 for custom packages). Pre-populate dl/ with the exact
+          # tarball each Makefile declares; PKG_HASH verifies it on extract.
+          # mosdns: GitHub source archive of the pinned fork tag.
           curl -fL "https://github.com/2017fighting/mosdns/archive/refs/tags/v5.5.0.tar.gz" \
             -o "$GITHUB_WORKSPACE/sdk/dl/mosdns-5.5.0.tar.gz"
-          echo "sha256: $(sha256sum "$GITHUB_WORKSPACE/sdk/dl/mosdns-5.5.0.tar.gz" | cut -d' ' -f1)"
+          echo "mosdns sha256: $(sha256sum "$GITHUB_WORKSPACE/sdk/dl/mosdns-5.5.0.tar.gz" | cut -d' ' -f1)"
+          # natmap: upstream release tarball declared in net/natmapt/Makefile.
+          curl -fL "https://github.com/heiher/natmap/releases/download/20260214/natmap-20260214.tar.xz" \
+            -o "$GITHUB_WORKSPACE/sdk/dl/natmap-20260214.tar.xz"
+          echo "natmap sha256: $(sha256sum "$GITHUB_WORKSPACE/sdk/dl/natmap-20260214.tar.xz" | cut -d' ' -f1)"
 
       - name: Build mosdns
         working-directory: ${{ github.workspace }}/sdk
@@ -193,6 +211,56 @@ jobs:
           # is present before indexing; fail loudly if a future SDK change
           # regresses this.
           ls -l "$OUT"/luci-app-mosdns-*.apk
+
+      # natmapt is a C binary built with the SDK's musl/gcc toolchain (unlike
+      # mosdns, which is pure Go cross-compiled with host Go). One Makefile
+      # defines natmapt + 5 PKGARCH:=all script sub-packages; one make call
+      # builds them all (make resolves the shared dependency on natmapt).
+      - name: Build natmapt (+ client/notify script sub-packages)
+        working-directory: ${{ github.workspace }}/sdk
+        run: |
+          make \
+            "package/feeds/$FEED_NAME/natmapt/compile" \
+            "package/feeds/$FEED_NAME/natmapt-client-script-transmission/compile" \
+            "package/feeds/$FEED_NAME/natmapt-client-script-deluge/compile" \
+            "package/feeds/$FEED_NAME/natmapt-notify-script-pushbullet/compile" \
+            "package/feeds/$FEED_NAME/natmapt-notify-script-pushover/compile" \
+            "package/feeds/$FEED_NAME/natmapt-notify-script-telegram/compile" \
+            -j"$(nproc)" V=s
+
+      # stuntman-client provides the `stunclient` binary that luci-app-natmapt's
+      # NAT-type-test calls. C++ target binary; its PKG_BUILD_DEPENDS:=boost/host
+      # triggers a host-boost build first (heavier). Git source — the SDK clones
+      # muink/stunserver.git directly, so no dl/ pre-fetch is needed (unlike the
+      # tarball packages above). Only -client is built; server/testcode unused.
+      - name: Build stuntman-client
+        working-directory: ${{ github.workspace }}/sdk
+        run: make "package/feeds/$FEED_NAME/stuntman-client/compile" -j"$(nproc)" V=s
+
+      - name: Build luci-app-natmapt
+        working-directory: ${{ github.workspace }}/sdk
+        run: make "package/feeds/$FEED_NAME/luci-app-natmapt/compile" -j"$(nproc)" V=s
+
+      - name: Smoke-test the built natmap binary
+        run: |
+          SDK="$GITHUB_WORKSPACE/sdk"
+          bin="$(find "$SDK/build_dir" -path '*natmap-*/bin/natmap' -type f | head -1)"
+          [ -n "$bin" ] || { echo "::error::natmap binary not found in build_dir"; find "$SDK/build_dir" -maxdepth 5 -name natmap; exit 1; }
+          echo "binary: $bin"
+          # natmap is a target-arch C binary. Don't try to exec it — it binds
+          # ports and would hang the runner — just confirm it compiled to ELF.
+          file "$bin"
+
+      - name: Verify natmapt + stuntman-client + luci-app-natmapt apks landed in the arch feed dir
+        run: |
+          SDK="$GITHUB_WORKSPACE/sdk"
+          OUT="$SDK/bin/packages/${{ matrix.arch }}/$FEED_NAME"
+          # natmapt and stuntman-client are arch-specific (one apk per arch); the
+          # *-script-* sub-packages and luci-app-natmapt are PKGARCH:=all (indexed
+          # under each arch slice).
+          ls -l "$OUT"/natmapt-*.apk
+          ls -l "$OUT"/stuntman-client-*.apk
+          ls -l "$OUT"/luci-app-natmapt-*.apk
 
       - name: Generate repository index
         working-directory: ${{ github.workspace }}/sdk

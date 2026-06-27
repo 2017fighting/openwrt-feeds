@@ -7,7 +7,7 @@ Pages.
 - **OpenWrt version:** 25.12.4 (APK package manager)
 - **Architectures:** `x86_64`, `aarch64_generic`
 - **Live binary feed:** <https://2017fighting.github.io/openwrt-feeds/25.12.4/>
-- **Packages:** `mosdns` (a plugin-based DNS forwarder; <https://github.com/IrineSistiana/mosdns>) and `luci-app-mosdns` (LuCI app)
+- **Packages:** `mosdns` + `luci-app-mosdns` (plugin-based DNS forwarder + LuCI app; <https://github.com/IrineSistiana/mosdns>), `natmapt` + `luci-app-natmapt` (TCP/UDP port mapping for full-cone NAT + LuCI app; <https://github.com/heiher/natmap>), and `stuntman-client` (STUN client used by natmapt's NAT-type test; <https://github.com/jselbie/stunserver>)
 - **Quick install:** `sh -c "$(wget -O- https://2017fighting.github.io/openwrt-feeds/feed.sh)"`
 
 This repository is **both** the source feed (OpenWrt package `Makefile`s on
@@ -96,8 +96,11 @@ dispatch):
 ## Repository layout
 
 ```
-net/mosdns/           # the mosdns package (Makefile + default config + init script)
-luci/luci-app-mosdns/ # the LuCI app (Makefile + htdocs/root)
+net/mosdns/            # the mosdns package (Makefile + default config + init script)
+net/natmapt/           # natmapt — TCP/UDP port mapping for full-cone NAT (binary + scripts + init)
+net/stuntman/          # stuntman-client — STUN client (stunclient) for natmapt's NAT-type test
+luci/luci-app-mosdns/  # the mosdns LuCI app (Makefile + htdocs/root)
+luci/luci-app-natmapt/ # the natmapt LuCI app (htdocs + rpcd + translations)
 keys/                 # apk EC public signing key (committed; private key is a CI secret)
 tooling/              # keygen + Pages index helpers (gen-key.sh, make-index.sh)
 feed.sh               # one-shot on-device installer (key + feed + apk update)
@@ -119,4 +122,7 @@ in `build.yml`). The SDK URL and Go `GOARCH` are derived from the entry.
 
 Package sources retain their upstream licenses. `mosdns` is **GPL-3.0**
 (<https://github.com/IrineSistiana/mosdns>); its `LICENSE` is shipped inside the
-package at `/usr/share/mosdns/LICENSE`.
+package at `/usr/share/mosdns/LICENSE`. `natmapt` is **MIT** and
+`luci-app-natmapt` is **Apache-2.0** (<https://github.com/heiher/natmap>,
+<https://github.com/muink/luci-app-natmapt>). `stuntman` is **Apache-2.0**
+(<https://github.com/jselbie/stunserver>).
