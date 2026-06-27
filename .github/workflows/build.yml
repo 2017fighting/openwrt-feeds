@@ -238,12 +238,14 @@ jobs:
 
       # stuntman-client provides the `stunclient` binary that luci-app-natmapt's
       # NAT-type-test calls. C++ target binary; its PKG_BUILD_DEPENDS:=boost/host
-      # triggers a host-boost build first (heavier). Git source — the SDK clones
-      # muink/stunserver.git directly, so no dl/ pre-fetch is needed (unlike the
-      # tarball packages above). Only -client is built; server/testcode unused.
+      # triggers a host-boost build first (heavier), and +libopenssl builds the
+      # openssl we pulled into the feed. Git source — the SDK clones
+      # muink/stunserver.git directly, no dl/ pre-fetch. feeds install maps the
+      # stuntman-client split onto its PKG_NAME=stuntman source, so the compile
+      # target is stuntman/compile (builds the client/server/testcode splits).
       - name: Build stuntman-client
         working-directory: ${{ github.workspace }}/sdk
-        run: make "package/feeds/$FEED_NAME/stuntman-client/compile" -j"$(nproc)" V=s
+        run: make "package/feeds/$FEED_NAME/stuntman/compile" -j"$(nproc)" V=s
 
       - name: Build luci-app-natmapt
         working-directory: ${{ github.workspace }}/sdk
