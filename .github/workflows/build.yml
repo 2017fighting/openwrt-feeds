@@ -227,20 +227,14 @@ jobs:
           ls -l "$OUT"/luci-app-mosdns-*.apk
 
       # natmapt is a C binary built with the SDK's musl/gcc toolchain (unlike
-      # mosdns, which is pure Go cross-compiled with host Go). One Makefile
-      # defines natmapt + 5 PKGARCH:=all script sub-packages; one make call
-      # builds them all (make resolves the shared dependency on natmapt).
+      # mosdns, which is pure Go cross-compiled with host Go). Its single Makefile
+      # defines natmapt + 5 PKGARCH:=all client/notify script sub-packages; building
+      # the source package (natmapt/compile) compiles AND packages all of them — the
+      # sub-packages share the net/natmapt source dir, so they have no separate
+      # compile targets.
       - name: Build natmapt (+ client/notify script sub-packages)
         working-directory: ${{ github.workspace }}/sdk
-        run: |
-          make \
-            "package/feeds/$FEED_NAME/natmapt/compile" \
-            "package/feeds/$FEED_NAME/natmapt-client-script-transmission/compile" \
-            "package/feeds/$FEED_NAME/natmapt-client-script-deluge/compile" \
-            "package/feeds/$FEED_NAME/natmapt-notify-script-pushbullet/compile" \
-            "package/feeds/$FEED_NAME/natmapt-notify-script-pushover/compile" \
-            "package/feeds/$FEED_NAME/natmapt-notify-script-telegram/compile" \
-            -j"$(nproc)" V=s
+        run: make "package/feeds/$FEED_NAME/natmapt/compile" -j"$(nproc)" V=s
 
       # stuntman-client provides the `stunclient` binary that luci-app-natmapt's
       # NAT-type-test calls. C++ target binary; its PKG_BUILD_DEPENDS:=boost/host
