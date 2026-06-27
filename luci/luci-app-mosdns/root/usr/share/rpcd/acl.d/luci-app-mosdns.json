@@ -3,7 +3,7 @@
 		"description": "Grant access for luci-app-mosdns",
 		"read": {
 			"file": {
-				"/etc/mosdns/config_custom.yaml": [ "read" ],
+				"/etc/mosdns/config.yaml": [ "read" ],
 				"/etc/mosdns/rule/*": [ "read" ],
 				"/etc/init.d/mosdns": [ "exec" ],
 				"/usr/bin/mosdns": [ "exec" ],
@@ -23,7 +23,7 @@
 		},
 		"write": {
 			"file": {
-				"/etc/mosdns/config_custom.yaml": [ "write" ],
+				"/etc/mosdns/config.yaml": [ "write" ],
 				"/etc/mosdns/rule/*": [ "write" ],
 				"/var/log/*": [ "write" ]
 			},

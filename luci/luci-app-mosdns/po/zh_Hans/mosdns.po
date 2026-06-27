@@ -25,9 +25,6 @@ msgstr "获取数据中..."
 msgid "Enabled"
 msgstr "启用"
 
-msgid "Config File"
-msgstr "配置文件"
-
 msgid "DNS Forward"
 msgstr "DNS 转发"
 
@@ -133,8 +130,8 @@ msgstr "错误：%s"
 msgid "Rule Settings"
 msgstr "规则列表"
 
-msgid "List files referenced by /etc/mosdns/config_custom.yaml. Save & Apply writes the files and restarts mosdns."
-msgstr "被 /etc/mosdns/config_custom.yaml 引用的列表文件。保存并应用会写入文件并重启 mosdns。"
+msgid "List files referenced by /etc/mosdns/config.yaml. Save & Apply writes the files and restarts mosdns."
+msgstr "被 /etc/mosdns/config.yaml 引用的列表文件。保存并应用会写入文件并重启 mosdns。"
 
 msgid "White Lists"
 msgstr "白名单"

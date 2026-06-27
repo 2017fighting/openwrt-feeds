@@ -34,7 +34,7 @@ return view.extend({
 		let m, s;
 
 		m = new form.Map('mosdns', _('Rule Settings'),
-			_('List files referenced by /etc/mosdns/config_custom.yaml. Save &amp; Apply writes the files and restarts mosdns.'));
+			_('List files referenced by /etc/mosdns/config.yaml. Save &amp; Apply writes the files and restarts mosdns.'));
 
 		s = m.section(form.TypedSection);
 		s.anonymous = true;

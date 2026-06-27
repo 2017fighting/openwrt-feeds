@@ -32,12 +32,12 @@ function exec_sys(cmd) {
 	return { code: code, stdout: stdout || "" };
 }
 
-// Active mosdns config file (UCI mosdns.config.configfile, default config_custom.yaml).
+// Active mosdns config file (UCI mosdns.config.configfile, default /etc/mosdns/config.yaml).
 function config_path() {
 	let c = cursor();
 	c.load('mosdns');
 	let p = c.get('mosdns', 'config', 'configfile');
-	return (p && p != '') ? p : '/etc/mosdns/config_custom.yaml';
+	return (p && p != '') ? p : '/etc/mosdns/config.yaml';
 }
 
 // Log path: read the `file:` field from the YAML; fall back to /var/log/mosdns.log.

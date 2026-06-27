@@ -3,7 +3,6 @@
 'require fs';
 'require poll';
 'require rpc';
-'require uci';
 'require ui';
 'require view';
 
@@ -60,23 +59,17 @@ async function loadCodeMirrorResources() {
 	}
 }
 
-return view.extend({
-	load() {
-		// Prime the shared uci cache so render() can read the configured
-		// config file synchronously. Don't stash the path on `this` inside a
-		// load() callback — that depends on this-binding across load/render
-		// and silently falls back to the default; read uci.get() directly in
-		// render() instead (the standard LuCI view idiom).
-		return uci.load('mosdns');
-	},
+// mosdns always runs /etc/mosdns/config.yaml (shipped by the mosdns package).
+// The path is fixed — there is no per-instance config file selector — so the
+// editor reads/writes this one constant path, matching the rpcd ACL exactly.
+const MOSDNS_CONFIG = '/etc/mosdns/config.yaml';
 
+return view.extend({
 	render() {
-		const configPath = uci.get('mosdns', 'config', 'configfile')
-			|| '/etc/mosdns/config_custom.yaml';
 		let m, s, o;
 
 		m = new form.Map('mosdns', _('MosDNS'),
-			_('mosdns with in-process CloudflareSpeedTest (cfst_pool + lpush). The editor below edits the file selected in "Config File"; Save writes it and restarts mosdns.'));
+			_('mosdns with in-process CloudflareSpeedTest (cfst_pool + lpush). The editor below edits /etc/mosdns/config.yaml; Save writes it and restarts mosdns.'));
 
 		// Service status banner.
 		s = m.section(form.TypedSection);
@@ -96,23 +89,20 @@ return view.extend({
 			]);
 		};
 
-		// UCI options: enabled / configfile / redirect.
+		// UCI options: enabled / redirect. The config file path is fixed at
+		// /etc/mosdns/config.yaml (MOSDNS_CONFIG) and is not exposed in the UI.
 		s = m.section(form.NamedSection, 'config', 'mosdns');
 
 		o = s.option(form.Flag, 'enabled', _('Enabled'));
 		o.rmempty = false;
 		o.default = o.disabled;
 
-		o = s.option(form.Value, 'configfile', _('Config File'));
-		o.default = '/etc/mosdns/config_custom.yaml';
-		o.rmempty = false;
-
 		o = s.option(form.Flag, 'redirect', _('DNS Forward'),
 			_('Forward Dnsmasq DNS requests to MosDNS (parses the listen port from the YAML).'));
 		o.rmempty = false;
 		o.default = o.disabled;
 
-		// YAML editor — edits the file named by the "Config File" field (configPath).
+		// YAML editor — edits /etc/mosdns/config.yaml (fixed path).
 		let configeditor = null;
 
 		// CodeMirror's default theme hardcodes a white background + black text,
@@ -159,9 +149,9 @@ return view.extend({
 		}, 600);
 
 		o = s.option(form.TextValue, '_custom', _('Configuration Editor'),
-			_('Edits the file selected in "Config File". Save writes it and restarts mosdns.'));
+			_('Edits /etc/mosdns/config.yaml. Save writes it and restarts mosdns.'));
 		o.rows = 25;
-		o.cfgvalue = section_id => fs.trimmed(configPath).catch(() => '');
+		o.cfgvalue = section_id => fs.trimmed(MOSDNS_CONFIG).catch(() => '');
 
 		o.write = function(section_id, formvalue) {
 			if (!configeditor)
@@ -171,13 +161,7 @@ return view.extend({
 			if (editorContent === formvalue)
 				return;
 
-			// Follow the "Config File" field: read its live value from the DOM so
-			// changing the path and saving in one pass writes to the newly selected
-			// file, falling back to the UCI value resolved at load time.
-			const input = document.getElementById('widget.cbid.mosdns.config.configfile');
-			const target = (input && input.value && input.value.trim()) || configPath;
-
-			return fs.write(target, editorContent.trim().replace(/\r\n/g, '\n') + '\n')
+			return fs.write(MOSDNS_CONFIG, editorContent.trim().replace(/\r\n/g, '\n') + '\n')
 				.then(() => fs.exec('/etc/init.d/mosdns', ['restart']))
 				.then(() => window.location.reload())
 				.catch(e => {

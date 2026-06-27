@@ -3,15 +3,15 @@
 #
 # Lean LuCI app for the personal mosdns (cfst_pool/lpush) pipeline.
 # Drop-in replacement for upstream sbwml/luci-app-mosdns: same package name,
-# menu path, UCI namespace, and rpcd object. Treats /etc/mosdns/config_custom.yaml
-# as the source of truth (in-browser editor) instead of generating it from UCI.
+# menu path, UCI namespace, and rpcd object. Edits /etc/mosdns/config.yaml
+# in-browser (shipped by the mosdns package) instead of generating it from UCI.
 #
 
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-mosdns
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=4
+PKG_RELEASE:=6
 PKG_MAINTAINER:=2017fighting
 PKG_LICENSE:=GPL-3.0
 
@@ -23,7 +23,6 @@ LUCI_PKGARCH:=all
 LUCI_DEPENDS:=+mosdns
 
 define Package/$(PKG_NAME)/conffiles
-/etc/mosdns/config_custom.yaml
 /etc/mosdns/rule
 endef
 

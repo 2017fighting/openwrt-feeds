@@ -1,14 +1,18 @@
 #!/bin/sh
 #
 # luci-app-mosdns first-install wiring.
-#   - always owns the configfile pointer (this app manages config_custom.yaml)
+#   - points configfile at the unified /etc/mosdns/config.yaml (shipped by the
+#     mosdns package; this app edits it in-browser) and drops any leftover
+#     config_custom.yaml from older releases
 #   - enables the service + dnsmasq redirect ONCE (sentinel-guarded so later
 #     LuCI toggles survive luci-app upgrades)
 #   - registers ucitrack so UCI mosdns edits reload the init
 
 SENTINEL=/etc/.luci_app_mosdns
 
-uci set mosdns.config.configfile='/etc/mosdns/config_custom.yaml'
+# Unify on /etc/mosdns/config.yaml (config_custom.yaml is removed entirely).
+rm -f /etc/mosdns/config_custom.yaml
+uci set mosdns.config.configfile='/etc/mosdns/config.yaml'
 
 if [ ! -f "$SENTINEL" ]; then
 	uci set mosdns.config.enabled='1'
