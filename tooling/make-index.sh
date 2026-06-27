@@ -115,7 +115,7 @@ QIBTN
       addlist=$(printf '%s\n' "$pkgs" | while IFS="$TAB" read -r name _; do [ -n "$name" ] && printf '%s ' "$name"; done)
       addlist="${addlist% }"
       cmd="wget -O /etc/apk/keys/2017fighting.pem ${key_url}
-echo '${repo_url}' >> /etc/apk/repositories
+echo '${repo_url}/packages.adb' >> /etc/apk/repositories
 apk update && apk add ${addlist}"
       ce=$(printf '%s' "$cmd" | esc)
       re=$(printf '%s' "$repo_url" | esc)

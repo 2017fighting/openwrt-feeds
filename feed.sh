@@ -59,7 +59,9 @@ wget -O /etc/apk/keys/2017fighting.pem "$key_url"
 # --- 4. Register the feed (idempotent) ---------------------------------------
 echo "add feed"
 # Community feeds go in repositories.d/customfeeds.list (apk 3.x on OpenWrt
-# sources this). Point at the directory — apk fetches <url>/packages.adb.
+# sources this). Point at the SIGNED INDEX (packages.adb) — the bare directory
+# makes apk probe the legacy <arch>/APKINDEX.tar.gz and fail with a doubled-path
+# 404 ("unexpected end of file"). A *.adb URL is read as the index directly.
 list=/etc/apk/repositories.d/customfeeds.list
 mkdir -p /etc/apk/repositories.d
 touch "$list"
@@ -69,7 +71,7 @@ for f in /etc/apk/repositories "$list"; do
 	[ -f "$f" ] || continue
 	grep -q "$marker" "$f" && sed -i "\#$marker#d" "$f"
 done
-echo "$feed_url" >> "$list"
+echo "$feed_url/packages.adb" >> "$list"
 
 # --- 5. Update ---------------------------------------------------------------
 echo "update feeds"

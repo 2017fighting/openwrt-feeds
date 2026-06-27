@@ -43,8 +43,9 @@ hand. Swap `x86_64` for `aarch64_generic` on armsr/armv8 devices.
 wget -O /etc/apk/keys/2017fighting.pem \
   https://raw.githubusercontent.com/2017fighting/openwrt-feeds/main/keys/2017fighting.pem
 
-# 2. Add the repository (point at the directory; apk fetches <url>/packages.adb)
-echo 'https://2017fighting.github.io/openwrt-feeds/25.12.4/x86_64' \
+# 2. Add the repository (point at the SIGNED INDEX; apk reads a *.adb URL
+#    directly — the bare directory makes it probe legacy APKINDEX.tar.gz and fail)
+echo 'https://2017fighting.github.io/openwrt-feeds/25.12.4/x86_64/packages.adb' \
   >> /etc/apk/repositories
 
 # 3. Install
@@ -56,9 +57,10 @@ apk add mosdns
 /etc/init.d/mosdns start
 ```
 
-For a custom firmware image (ASU / imagebuilder), point the additional feed URL
-**directly at the index**, e.g.
-`https://2017fighting.github.io/openwrt-feeds/25.12.4/x86_64/packages.adb`.
+Always point the feed at the **signed index file** (`packages.adb`), not the
+directory — the bare directory makes apk probe the legacy `<arch>/APKINDEX.tar.gz`
+and warn (`unexpected end of file`). The same `packages.adb` URL is what a custom
+firmware image (ASU / imagebuilder) consumes as an additional feed.
 
 > The default config (`/etc/mosdns/config.yaml`) runs the cfst_pool/lpush
 > Cloudflare-speedtest pipeline: it listens on `:1053` (UDP+TCP), forwards via
