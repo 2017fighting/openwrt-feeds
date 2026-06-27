@@ -8,7 +8,10 @@ LUCI_NAME:=luci-app-natmapt
 
 LUCI_TITLE:=LuCI Support for natmap
 LUCI_PKGARCH:=all
-LUCI_DEPENDS:=+natmapt +coreutils-timeout +stuntman-client
+# `timeout` (used by natcheck.sh) is provided by busybox on OpenWrt, so we
+# don't depend on coreutils-timeout — that avoids pulling coreutils + its
+# core-lib deps into the build.
+LUCI_DEPENDS:=+natmapt +stuntman-client
 
 LUCI_DESCRIPTION:=TCP/UDP port mapping for full cone NAT
 

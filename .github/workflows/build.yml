@@ -234,6 +234,16 @@ jobs:
           # regresses this.
           ls -l "$OUT"/luci-app-mosdns-*.apk
 
+      # natmapt's deps reach into CORE OpenWrt libs that the direct-compile graph
+      # doesn't pull — they aren't feed-resolvable ("No feed for package
+      # 'libopenssl'/'libncurses'"), so selecting them in .config is not enough;
+      # they must be built. Do it explicitly so curl finds libopenssl (TLS, via
+      # CONFIG_LIBCURL_OPENSSL) and bash finds libncurses/libreadline in staging.
+      # libopenssl is also stuntman-client's dep.
+      - name: Build core libs natmapt's deps need (openssl/ncurses/readline)
+        working-directory: ${{ github.workspace }}/sdk
+        run: make package/libs/openssl/compile package/libs/ncurses/compile package/libs/readline/compile -j"$(nproc)" V=s
+
       # natmapt is a C binary built with the SDK's musl/gcc toolchain (unlike
       # mosdns, which is pure Go cross-compiled with host Go). One Makefile
       # defines natmapt + 5 PKGARCH:=all script sub-packages; one make call
