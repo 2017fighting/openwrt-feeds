@@ -19,6 +19,7 @@ that compiles, signs, and publishes a **binary apk feed** to GitHub Pages.
 - `.github/workflows/`     — `build.yml` (build+sign+deploy), `keygen.yml` (one-time keypair)
 - Adding a package: drop `<category>/<pkg>/Makefile` at the repo root; push.
 - Adding an arch: append to `feeds.config` (the workflow reads it via `jq`).
+- `feed.sh`              — on-device installer (adds apk key + feed, runs `apk update`); copied to the Pages site root by `build.yml`.
 
 ## Notes
 - `mosdns` is pure Go (CGO=0), cross-compiled with host Go, pinned to **v5.5.0**.

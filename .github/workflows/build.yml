@@ -10,6 +10,8 @@ on:
       - 'luci/**'
       - 'feeds.config'
       - 'keys/2017fighting.pem'
+      - 'feed.sh'            # published to the Pages site root — republish on change
+      - 'README.md'          # copied to the Pages site — republish on change
       - '.github/workflows/build.yml'
       - '.github/workflows/keygen.yml'
       - 'tooling/**'
@@ -249,11 +251,12 @@ jobs:
           path: site
           merge-multiple: true
 
-      - name: Add public key + README to the site
+      - name: Add public key, README, and feed.sh to the site
         run: |
           mkdir -p site/keys
           cp keys/2017fighting.pem site/keys/2017fighting.pem
           cp README.md site/README.md
+          cp feed.sh site/feed.sh
 
       - name: Generate browsable index.html (Pages has no directory autoindex)
         env:

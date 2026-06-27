@@ -5,14 +5,38 @@ OpenWrt SDK in GitHub Actions and published as a **signed APK feed** to GitHub
 Pages.
 
 - **OpenWrt version:** 25.12.4 (APK package manager)
-- **Architecture:** x86_64
-- **Live binary feed:** <https://2017fighting.github.io/openwrt-feeds/25.12.4/x86_64/>
-- **Packages:** `mosdns` (a plugin-based DNS forwarder; <https://github.com/IrineSistiana/mosdns>)
+- **Architectures:** `x86_64`, `aarch64_generic`
+- **Live binary feed:** <https://2017fighting.github.io/openwrt-feeds/25.12.4/>
+- **Packages:** `mosdns` (a plugin-based DNS forwarder; <https://github.com/IrineSistiana/mosdns>) and `luci-app-mosdns` (LuCI app)
+- **Quick install:** `sh -c "$(wget -O- https://2017fighting.github.io/openwrt-feeds/feed.sh)"`
 
 This repository is **both** the source feed (OpenWrt package `Makefile`s on
 `main`) and the generator of the published binary feed.
 
-## Install on a 25.12.4 x86_64 device
+## Quick install
+
+On the device, run the one-shot installer — it detects the arch and release,
+installs the signing key, registers the feed, and runs `apk update`:
+
+```sh
+sh -c "$(wget -O- https://2017fighting.github.io/openwrt-feeds/feed.sh)"
+```
+
+Then install packages and enable the service:
+
+```sh
+apk add mosdns luci-app-mosdns
+/etc/init.d/mosdns enable && /etc/init.d/mosdns start
+```
+
+Prefer to read it first? See [`feed.sh`](feed.sh), mirrored on [the Pages
+site](https://2017fighting.github.io/openwrt-feeds/feed.sh). It is apk-only and
+refuses opkg-only releases.
+
+## Manual install
+
+The steps below are what `feed.sh` automates, in case you prefer to do them by
+hand. Swap `x86_64` for `aarch64_generic` on armsr/armv8 devices.
 
 ```sh
 # 1. Trust this feed's signing key (apk EC public key; apk reads all of /etc/apk/keys/)
@@ -70,11 +94,13 @@ dispatch):
 ## Repository layout
 
 ```
-net/mosdns/          # the mosdns package (Makefile + default config + init script)
-keys/                # apk EC public signing key (committed; private key is a CI secret)
-tooling/             # keygen helper (tooling/gen-key.sh)
-feeds.config         # supported feeds (version x arch) — drives the build matrix
-.github/workflows/   # CI: build, sign, publish
+net/mosdns/           # the mosdns package (Makefile + default config + init script)
+luci/luci-app-mosdns/ # the LuCI app (Makefile + htdocs/root)
+keys/                 # apk EC public signing key (committed; private key is a CI secret)
+tooling/              # keygen + Pages index helpers (gen-key.sh, make-index.sh)
+feed.sh               # one-shot on-device installer (key + feed + apk update)
+feeds.config          # supported feeds (version x arch) — drives the build matrix
+.github/workflows/    # CI: build, sign, publish
 ```
 
 ## Adding a package

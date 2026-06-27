@@ -68,6 +68,18 @@ CSS
     printf 'Public key: <a href="%s/keys/2017fighting.pem">2017fighting.pem</a>. ' "$SITE_BASE"
     printf 'Docs: <a href="%s/README.md">README.md</a>.</p>\n' "$SITE_BASE"
 
+    # Quick-install box: root page only (feed.sh is copied to the site root).
+    if [ "$dir" = "$ROOT" ] && [ -f "$ROOT/feed.sh" ]; then
+      qi=$(printf 'sh -c "$(wget -O- %s/feed.sh)"' "$SITE_BASE")
+      qie=$(printf '%s' "$qi" | esc)
+      printf '<h2>Quick install</h2>\n'
+      printf '<p class="muted">Auto-detects arch + release, installs the signing key and feed, then runs <code>apk update</code>.</p>\n'
+      printf '<pre><code id="qi">%s</code></pre>\n' "$qie"
+      cat <<'QIBTN'
+<button onclick="navigator.clipboard.writeText(document.getElementById('qi').textContent).then(()=>{this.textContent='Copied ✓';setTimeout(()=>this.textContent='Copy',1500)})">Copy</button>
+QIBTN
+    fi
+
     # File listing
     printf '<h2>Files</h2>\n'
     printf '<table><thead><tr><th>Name</th><th class="size">Size</th></tr></thead><tbody>\n'
