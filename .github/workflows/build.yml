@@ -175,6 +175,13 @@ jobs:
           test -f /tmp/pkg-feed/libs/boost/Makefile
           mkdir -p "$GITHUB_WORKSPACE/libs"
           cp -r /tmp/pkg-feed/libs/boost "$GITHUB_WORKSPACE/libs/boost"
+          # boost's Makefile includes ../../lang/python/python3-version.mk (a
+          # packages-feed sibling, 385 bytes, self-contained); fetch that one file
+          # too so the relative include resolves outside the packages feed tree.
+          mkdir -p "$GITHUB_WORKSPACE/lang/python"
+          curl -fsSL "https://raw.githubusercontent.com/openwrt/packages/$pkg_ref/lang/python/python3-version.mk" \
+            -o "$GITHUB_WORKSPACE/lang/python/python3-version.mk"
+          test -f "$GITHUB_WORKSPACE/lang/python/python3-version.mk"
 
       - name: Update + install feeds
         working-directory: ${{ github.workspace }}/sdk
