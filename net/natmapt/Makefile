@@ -44,7 +44,12 @@ define Package/natmapt
   CATEGORY:=Network
   TITLE:=TCP/UDP port mapping tool for full cone NAT
   URL:=https://github.com/heiher/natmap
-  DEPENDS:=+curl +jsonfilter +bash
+  # curl/jsonfilter/bash are RUNTIME deps for the init + helper scripts; the natmap
+  # binary does NOT link them. Not declared as DEPENDS: the OpenWrt SDK can't build
+  # them (curl->openssl, bash->ncurses; core libs absent from the SDK), and every
+  # device already has them in its standard repos. On the device run:
+  #   apk add bash curl jsonfilter
+  DEPENDS:=
 endef
 
 MAKE_FLAGS += REV_ID="$(PKG_VERSION)"
