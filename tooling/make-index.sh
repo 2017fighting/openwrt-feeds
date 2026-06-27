@@ -114,9 +114,11 @@ QIBTN
       key_url="$SITE_BASE/keys/2017fighting.pem"
       addlist=$(printf '%s\n' "$pkgs" | while IFS="$TAB" read -r name _; do [ -n "$name" ] && printf '%s ' "$name"; done)
       addlist="${addlist% }"
-      cmd="wget -O /etc/apk/keys/2017fighting.pem ${key_url}
-echo '${repo_url}/packages.adb' >> /etc/apk/repositories
-apk update && apk add ${addlist}"
+      # feed.sh (at the site root) installs the signing key, registers this feed
+      # for the detected arch+release, and runs `apk update` — so the per-arch
+      # install box just runs it, then `apk add`s the packages.
+      cmd="sh -c \"\$(wget -O- ${SITE_BASE}/feed.sh)\"
+apk add ${addlist}"
       ce=$(printf '%s' "$cmd" | esc)
       re=$(printf '%s' "$repo_url" | esc)
       printf '<h2>Repository URL</h2>\n'
