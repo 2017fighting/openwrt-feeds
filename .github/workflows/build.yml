@@ -176,8 +176,17 @@ jobs:
       - name: Generate non-interactive .config
         working-directory: ${{ github.workspace }}/sdk
         run: |
+          # Select libopenssl (stuntman-client's dep, pulled into the feed at CI
+          # time) with engine support OFF: openssl's default devcrypto engine
+          # #includes crypto/cryptodev.h (from kmod-cryptodev), which the SDK
+          # lacks, so a default-engine openssl fails to compile. stuntman only
+          # needs core libssl/libcrypto. defconfig honors the explicit "not set".
+          cat > .config <<'EOF'
+          CONFIG_PACKAGE_libopenssl=y
+          # CONFIG_OPENSSL_ENGINE is not set
+          EOF
           make defconfig
-          grep -E 'CONFIG_PACKAGE_mosdns=' .config || echo 'mosdns not selected (direct compile target still builds it)'
+          grep -E 'CONFIG_OPENSSL_ENGINE|CONFIG_PACKAGE_libopenssl' .config || true
 
       - name: Pre-fetch package sources into SDK dl/
         run: |
