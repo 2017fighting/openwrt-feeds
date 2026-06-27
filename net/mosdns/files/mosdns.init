@@ -7,8 +7,8 @@
 #   option configfile  '/path/to.yaml'   config passed to `mosdns start -c`
 #   option redirect    '0|1'             point dnsmasq at mosdns (DNS forward)
 #
-# The mosdns package ships a harmless default at /etc/mosdns/config.yaml.
-# luci-app-mosdns re-points configfile at /etc/mosdns/config_custom.yaml.
+# The single config is /etc/mosdns/config.yaml — shipped by this package and
+# managed/edited in-browser by luci-app-mosdns. UCI configfile may override it.
 #
 # When redirect=1, the listen port is parsed from the YAML's `listen:` field
 # (e.g. ":1053" or "0.0.0.0:1053") and dnsmasq is given server 127.0.0.1#<port>.

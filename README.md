@@ -36,8 +36,10 @@ For a custom firmware image (ASU / imagebuilder), point the additional feed URL
 **directly at the index**, e.g.
 `https://2017fighting.github.io/openwrt-feeds/25.12.4/x86_64/packages.adb`.
 
-> The default config (`/etc/mosdns/config.yaml`) forwards to Google DNS and
-> listens on `127.0.0.1:53`. Edit it for your network and
+> The default config (`/etc/mosdns/config.yaml`) runs the cfst_pool/lpush
+> Cloudflare-speedtest pipeline: it listens on `:1053` (UDP+TCP), forwards via
+> mihomo (`127.0.0.1:2053`) with a `223.5.5.5` fallback, and rewrites Cloudflare
+> response IPs with the fastest probed IPs. Edit it (or use the LuCI app) and
 > `/etc/init.d/mosdns restart`.
 
 ## Signing
