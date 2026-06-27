@@ -25,9 +25,20 @@ sh -c "$(wget -O- https://2017fighting.github.io/openwrt-feeds/feed.sh)"
 Then install packages and enable the service:
 
 ```sh
+# mosdns (plugin-based DNS forwarder)
 apk add mosdns luci-app-mosdns
 /etc/init.d/mosdns enable && /etc/init.d/mosdns start
+
+# natmapt (TCP/UDP port mapping for full-cone NAT) + LuCI app
+apk add natmapt luci-app-natmapt
+/etc/init.d/natmap enable && /etc/init.d/natmap start
 ```
+
+`apk add natmapt` auto-installs its runtime deps (`curl`, `jsonfilter`, `bash`),
+and `apk add luci-app-natmapt` auto-installs `coreutils-timeout` and
+`stuntman-client` (the STUN client for the NAT-type test) — resolved from the
+device's own repos plus this feed. Default OpenWrt ships busybox `ash`/`wget`
+rather than `bash`/`curl`, so those are pulled on install.
 
 Prefer to read it first? See [`feed.sh`](feed.sh), mirrored on [the Pages
 site](https://2017fighting.github.io/openwrt-feeds/feed.sh). It is apk-only and
@@ -88,9 +99,13 @@ OpenWrt signs its apk repos.
 dispatch):
 
 1. Download + extract the matching OpenWrt SDK.
-2. Register this repo as a feed (`src-link`) inside the SDK.
-3. Compile each package (`make package/<feed>/<pkg>/compile`).
-4. Generate + sign the index (`make package/index` → `packages.adb` + `.sig`).
+2. Register this repo as a feed (`src-link`) inside the SDK; register `luci`
+   only, not `packages` (see [`CLAUDE.md`](CLAUDE.md) for why).
+3. Pull the core libs `stuntman-client` needs (`boost`, `openssl`) into this
+   feed at CI time, then compile each package
+   (`make package/feeds/<feed>/<pkg>/compile`).
+4. Generate + sign the index (`make package/index` → `packages.adb`, signed
+   in-place by `apk adbsign` — no separate `.sig`).
 5. Publish the whole site to GitHub Pages (`actions/deploy-pages`).
 
 ## Repository layout
@@ -111,7 +126,13 @@ feeds.config          # supported feeds (version x arch) — drives the build ma
 ## Adding a package
 
 Drop a new `<category>/<pkg>/Makefile` (standard OpenWrt package definition) at
-the repo root and push. The build picks it up automatically.
+the repo root, then wire it into `.github/workflows/build.yml`: add it to the
+`feeds install` line and a `make package/feeds/$FEED_NAME/<pkg>/compile` step.
+It is **not** automatic — the SDK ships no core package sources and only builds
+feed packages, so anything needing a core lib (openssl/boost/…) or a standard
+runtime dep needs the patterns described in [`CLAUDE.md`](CLAUDE.md) (runtime-only
+deps via the unregistered `packages` feed; core libs pulled into this feed at
+CI time).
 
 ## Adding a version or architecture
 
@@ -125,4 +146,7 @@ Package sources retain their upstream licenses. `mosdns` is **GPL-3.0**
 package at `/usr/share/mosdns/LICENSE`. `natmapt` is **MIT** and
 `luci-app-natmapt` is **Apache-2.0** (<https://github.com/heiher/natmap>,
 <https://github.com/muink/luci-app-natmapt>). `stuntman` is **Apache-2.0**
-(<https://github.com/jselbie/stunserver>).
+(<https://github.com/jselbie/stunserver>). This feed also ships `libopenssl`
+(**Apache-2.0**) and `boost` (**BSL-1.0**) — pulled in at CI time as
+stuntman-client's build/runtime deps (redundant with the device's core, same
+versions).
