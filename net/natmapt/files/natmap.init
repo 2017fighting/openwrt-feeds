@@ -14,6 +14,7 @@ NATMAPSECTION=natmap
 PROG=/usr/bin/$NAME
 
 STATUS_PATH=/var/run/natmap
+PUBLIC_STATUS_PATH=/www/natmap
 
 config_load "$NAME"
 
@@ -320,6 +321,14 @@ clear_status_files() {
 		find . -type f -print0 | xargs -0 rm -f --
 	fi
 	popd >/dev/null
+
+	# public status files are keyed by SECTIONID (one .json per section).
+	# Note: the *.json glob must stay OUTSIDE the quotes to expand.
+	if [ -n "$sid" ]; then
+		rm -f "${PUBLIC_STATUS_PATH}/${sid}.json"
+	else
+		rm -f "${PUBLIC_STATUS_PATH}/"*.json
+	fi
 }
 
 # err_msg__empty <section> <option>

@@ -10,6 +10,9 @@ shift 6
 . /usr/share/libubox/jshn.sh
 INITD='/etc/init.d/natmap'
 STATUS_PATH='/var/run/natmap'
+# Public status dir: uhttpd serves /www over HTTP, so /www/natmap/*.json is a
+# query interface for other programs to read each section's live mapping.
+PUBLIC_STATUS_PATH='/www/natmap'
 
 # fallloop <retry interval> <retry limit> <func> [args...]
 fallloop() {
@@ -39,6 +42,22 @@ fi
 	json_add_string protocol "$protocol"
 	json_add_string inner_ip "$inner_ip"
 	json_dump > "$STATUS_PATH/$PPID.json"
+)
+
+# public status: one file per section (keyed by SECTIONID), served by uhttpd.
+mkdir -p "$PUBLIC_STATUS_PATH" 2>/dev/null
+(
+	json_init
+	json_add_string sid "$SECTIONID"
+	json_add_string pid "$PPID"
+	json_add_string comment "$COMMENT"
+	json_add_string ip "$ip"
+	json_add_int port "$port"
+	json_add_string ip4p "$ip4p"
+	json_add_int inner_port "$inner_port"
+	json_add_string protocol "$protocol"
+	json_add_string inner_ip "$inner_ip"
+	json_dump > "$PUBLIC_STATUS_PATH/$SECTIONID.json"
 )
 
 if [ -n "$REFRESH" ]; then
