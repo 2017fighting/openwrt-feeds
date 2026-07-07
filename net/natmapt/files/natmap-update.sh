@@ -29,11 +29,13 @@ build_status() {
 
 # Read JSON text from stdin and write <file> atomically: stage a temp file
 # beside the target (same filesystem -> rename is atomic) so a reader never
-# observes a half-written file.
+# observes a half-written file. <mode> sets the final perms (default 600; pass
+# 644 for files served by uhttpd — it refuses non-world-readable files, so the
+# mktemp default of 600 would 403).
 _status_write() {
-	local f="$1" t
+	local f="$1" m="${2:-600}" t
 	t="$(mktemp "${f}.XXXXXX")" || return 1
-	cat > "$t" && mv -f "$t" "$f" || { rm -f "$t"; return 1; }
+	{ cat > "$t" && chmod "$m" "$t" && mv -f "$t" "$f"; } || { rm -f "$t"; return 1; }
 }
 
 # fallloop <retry interval> <retry limit> <func> [args...]
@@ -74,7 +76,7 @@ _public_name="$(printf '%s' "$_public_name" | tr -c 'A-Za-z0-9._-' '_' | sed 's/
 	build_status
 	json_add_string name "$_public_name"
 	json_add_string pid "$PPID"
-	json_dump | _status_write "$PUBLIC_STATUS_PATH/$_public_name.json"
+	json_dump | _status_write "$PUBLIC_STATUS_PATH/$_public_name.json" 644
 )
 
 if [ -n "$REFRESH" ]; then
