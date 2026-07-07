@@ -14,6 +14,28 @@ STATUS_PATH='/var/run/natmap'
 # query interface for other programs to read each section's live mapping.
 PUBLIC_STATUS_PATH='/www/natmap'
 
+# Add the status fields shared by the private and public files to the current
+# json object.
+build_status() {
+	json_add_string sid "$SECTIONID"
+	json_add_string comment "$COMMENT"
+	json_add_string ip "$ip"
+	json_add_int port "$port"
+	json_add_string ip4p "$ip4p"
+	json_add_int inner_port "$inner_port"
+	json_add_string protocol "$protocol"
+	json_add_string inner_ip "$inner_ip"
+}
+
+# Read JSON text from stdin and write <file> atomically: stage a temp file
+# beside the target (same filesystem -> rename is atomic) so a reader never
+# observes a half-written file.
+_status_write() {
+	local f="$1" t
+	t="$(mktemp "${f}.XXXXXX")" || return 1
+	cat > "$t" && mv -f "$t" "$f" || { rm -f "$t"; return 1; }
+}
+
 # fallloop <retry interval> <retry limit> <func> [args...]
 fallloop() {
 	local retry="$1"; shift
@@ -31,33 +53,28 @@ if [ -n "$RWFW" -a "$($INITD info|jsonfilter -qe "@['$(basename $INITD)'].instan
 	export PUBPORT="$port" #PROCD_DEBUG=1
 	$INITD start "$SECTIONID"
 fi
+# private status (keyed by PID; consumed by /etc/init.d/natmap)
 (
 	json_init
-	json_add_string sid "$SECTIONID"
-	json_add_string comment "$COMMENT"
-	json_add_string ip "$ip"
-	json_add_int port "$port"
-	json_add_string ip4p "$ip4p"
-	json_add_int inner_port "$inner_port"
-	json_add_string protocol "$protocol"
-	json_add_string inner_ip "$inner_ip"
-	json_dump > "$STATUS_PATH/$PPID.json"
+	build_status
+	json_dump | _status_write "$STATUS_PATH/$PPID.json"
 )
 
-# public status: one file per section (keyed by SECTIONID), served by uhttpd.
+# public status, served by uhttpd as a query interface for other programs.
+# Prefer a user-set STATUS_NAME (stable, readable URL) and fall back to the
+# section id. Sanitize to a safe, non-hidden filename: '/' and other unsafe
+# chars become '_' and leading [._-] are stripped — this blocks path traversal
+# and keeps the file visible so the init script's glob-based cleanup matches it.
 mkdir -p "$PUBLIC_STATUS_PATH" 2>/dev/null
+_public_name="${STATUS_NAME:-$SECTIONID}"
+_public_name="$(printf '%s' "$_public_name" | tr -c 'A-Za-z0-9._-' '_' | sed 's/^[._-]*//')"
+[ -n "$_public_name" ] || _public_name="$SECTIONID"
 (
 	json_init
-	json_add_string sid "$SECTIONID"
+	build_status
+	json_add_string name "$_public_name"
 	json_add_string pid "$PPID"
-	json_add_string comment "$COMMENT"
-	json_add_string ip "$ip"
-	json_add_int port "$port"
-	json_add_string ip4p "$ip4p"
-	json_add_int inner_port "$inner_port"
-	json_add_string protocol "$protocol"
-	json_add_string inner_ip "$inner_ip"
-	json_dump > "$PUBLIC_STATUS_PATH/$SECTIONID.json"
+	json_dump | _status_write "$PUBLIC_STATUS_PATH/$_public_name.json"
 )
 
 if [ -n "$REFRESH" ]; then

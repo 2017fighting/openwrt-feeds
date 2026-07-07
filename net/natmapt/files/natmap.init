@@ -107,6 +107,7 @@ validate_section_natmap() {
 		'http_server:string' \
 		'fwmark_value:string' \
 		'comment:string' \
+		'name:string' \
 		'udp_mode:bool:0' \
 		'family:or("ipv4", "ipv6"):ipv4' \
 		'bind_ifname:network' \
@@ -211,6 +212,7 @@ natmap_instance() {
 
 	procd_set_param env "SECTIONID=$1"
 	procd_append_param env "COMMENT=$comment"
+	[ -n "$name" ] && procd_append_param env "STATUS_NAME=$name"
 	if [ "$forward" = 1 ]; then
 		# Rewrite the dest_port(forward port) using a public port
 		[ "$forward_port" = 0 -a "$forward_mode" = "dnat" ] && procd_append_param env "RWFW=1"
@@ -307,11 +309,14 @@ natmap_instance() {
 	procd_close_instance
 }
 
-clear_status_files() {
-	local f sid="$1"
+# _clear_status_dir <dir> [sid] — remove all <dir>/*.json, or just the one whose
+# ".sid" field matches. The public filename may be name- or sid-based, so match
+# by content rather than by filename.
+_clear_status_dir() {
+	local dir="$1" sid="$2" f
 
-	mkdir -p "${STATUS_PATH}" 2>/dev/null
-	pushd "${STATUS_PATH}" >/dev/null
+	mkdir -p "${dir}" 2>/dev/null
+	pushd "${dir}" >/dev/null
 	if [ -n "$sid" ]; then
 		for f in *.json; do
 			[ "$(jsonfilter -q -i $f -e '@.sid')" = "$sid" ] || continue
@@ -321,14 +326,11 @@ clear_status_files() {
 		find . -type f -print0 | xargs -0 rm -f --
 	fi
 	popd >/dev/null
+}
 
-	# public status files are keyed by SECTIONID (one .json per section).
-	# Note: the *.json glob must stay OUTSIDE the quotes to expand.
-	if [ -n "$sid" ]; then
-		rm -f "${PUBLIC_STATUS_PATH}/${sid}.json"
-	else
-		rm -f "${PUBLIC_STATUS_PATH}/"*.json
-	fi
+clear_status_files() {
+	_clear_status_dir "$STATUS_PATH" "$1"
+	_clear_status_dir "$PUBLIC_STATUS_PATH" "$1"
 }
 
 # err_msg__empty <section> <option>
