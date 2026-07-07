@@ -334,6 +334,9 @@ return view.extend({
 		o = s.taboption('general', form.Value, 'comment', _('Comment'));
 		o.rmempty = true;
 
+		o = s.taboption('general', form.Value, 'name', _('Name'), _('Public status URL name (e.g. /natmap/hath.json); empty uses the section id'));
+		o.rmempty = true;
+
 		o = s.taboption('general', form.ListValue, 'udp_mode', _('Protocol'));
 		o.default = '0';
 		o.value('0', 'TCP');

@@ -61,6 +61,9 @@ msgstr "检测 NAT 行为"
 msgid "Comment"
 msgstr "备注"
 
+msgid "Public status URL name (e.g. /natmap/hath.json); empty uses the section id"
+msgstr "公开状态 URL 的名称（如 /natmap/hath.json）；留空则使用 section id"
+
 #: htdocs/luci-static/resources/view/natmap.js:302
 #: htdocs/luci-static/resources/view/natmap.js:755
 msgid "Custom Script"
