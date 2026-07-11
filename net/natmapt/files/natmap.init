@@ -122,8 +122,7 @@ validate_section_natmap() {
 		'forward_port:port' \
 		'refresh:bool:0' \
 		'clt_script:file' \
-		'clt_scheme:or("http", "https"):http' \
-		'clt_web_port:and(port, min(1))' \
+		'clt_url:string' \
 		'clt_username:string' \
 		'clt_password:string' \
 		'notify_enable:bool:0' \
@@ -220,11 +219,9 @@ natmap_instance() {
 		if [ "$refresh" = 1 ]; then
 			procd_append_param env "REFRESH=$clt_script"
 			json_init
-			json_add_string scheme "$clt_scheme"
-			json_add_int web_port "$clt_web_port"
+			json_add_string url "$clt_url"
 			json_add_string username "$clt_username"
 			json_add_string password "$clt_password"
-			json_add_string host "$forward_target"
 			procd_append_param env "REFRESH_PARAM=$(json_dump)"
 		fi
 	fi
@@ -410,7 +407,7 @@ launcher() {
 	## refresh
 	if [ "$refresh" = 1 ]; then
 		[ -x "$clt_script" ] || { >&2 echo "$(basename $0): section $1 option clt_script '$clt_script' is empty or non-executable"; let error++; }
-		[ -z "$clt_web_port" ] && err_msg__empty $1 clt_web_port && let error++
+		[ -z "$clt_url" ] && err_msg__empty $1 clt_url && let error++
 	fi
 	## notify
 	if [ "$notify_enable" = 1 ]; then
@@ -427,7 +424,7 @@ launcher() {
 
 	# review
 	[ -n "$NATMAP_DEBUG" ] && {
-		local v ucivv="enable interval stun_cycle stun_server http_server fwmark_value comment udp_mode proto family bind_ifname ifname bind_ip lan_addr port port_pointer forward forward_mode natloopback forward_congestion forward_timeout forward_target forward_port refresh clt_script clt_scheme clt_web_port clt_username clt_password notify_enable notify_script notify_tokens notify_custom_domain notify_text ddns_enable ddns_script ddns_tokens ddns_a ddns_aaaa ddns_srv ddns_srv_serv ddns_srv_proto ddns_srv_target ddns_srv_priority ddns_srv_weight ddns_https ddns_https_target ddns_https_svcparams ddns_https_priority custom_script"
+		local v ucivv="enable interval stun_cycle stun_server http_server fwmark_value comment udp_mode proto family bind_ifname ifname bind_ip lan_addr port port_pointer forward forward_mode natloopback forward_congestion forward_timeout forward_target forward_port refresh clt_script clt_url clt_username clt_password notify_enable notify_script notify_tokens notify_custom_domain notify_text ddns_enable ddns_script ddns_tokens ddns_a ddns_aaaa ddns_srv ddns_srv_serv ddns_srv_proto ddns_srv_target ddns_srv_priority ddns_srv_weight ddns_https ddns_https_target ddns_https_svcparams ddns_https_priority custom_script"
 		for v in $ucivv; do eval "echo $1 $v=\'\$$v\'"; done # ash not support ${!v}
 	}
 	[ "$error" -gt 0 ] && return 1

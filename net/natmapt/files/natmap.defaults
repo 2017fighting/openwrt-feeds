@@ -27,6 +27,24 @@ else
 ## def_interval --> def_tcp_interval/def_udp_interval
 sed -Ei 's|def_interval (.*)|def_tcp_interval \1\n\toption def_udp_interval \1|' "$CONF"
 fi
+# clt_scheme + clt_web_port (+ forward_target) --> clt_url
+# The client host was always forward_target; reconstruct the equivalent URL
+# once for sections that still carry the old options.
+uci -q show $NAME 2>/dev/null | sed -nE "s|^$NAME\.([^.]+)\.clt_scheme=.*|\1|p" | while read -r _sec; do
+	[ -n "$(uci -q get $NAME.$_sec.clt_url)" ] && continue
+	_h="$(uci -q get $NAME.$_sec.forward_target)"
+	[ -n "$_h" ] || continue
+	_s="$(uci -q get $NAME.$_sec.clt_scheme)"; _s="${_s:-http}"
+	_w="$(uci -q get $NAME.$_sec.clt_web_port)"
+	if [ -n "$_w" ]; then
+		uci set $NAME.$_sec.clt_url="${_s}://${_h}:${_w}"
+	else
+		uci set $NAME.$_sec.clt_url="${_s}://${_h}"
+	fi
+	uci -q delete $NAME.$_sec.clt_scheme
+	uci -q delete $NAME.$_sec.clt_web_port
+done
+uci -q commit $NAME
 # gen natmap-curl
 ln -sf "$(command -v curl)" /usr/bin/natmap-curl
 exit 0

@@ -9,19 +9,19 @@
 
 start() {
 	local retry='--connect-timeout 1 --retry 0'
-	scheme='http' # only supports http
 	local sid="$($CURL $retry -L \
 		-u ${username}:${password} \
-		--url ${scheme}://${host}:${web_port}/transmission/rpc \
+		--url "${base}/transmission/rpc" \
 		| sed 's|.*<code>||g;s|</code>.*||g')"
 	$CURL $retry -L -X POST \
 		-H "$sid" -u ${username}:${password} \
 		-d '{"method":"session-set","arguments":{"peer-port":"'"${port}"'"}}' \
-		--url ${scheme}://${host}:${web_port}/transmission/rpc
+		--url "${base}/transmission/rpc"
 }
 
 
 # All external parameters required
-ALL_PARAMS="host port scheme web_port username password"
+ALL_PARAMS="port url username password"
 eval "$(JSON_EXPORT "$1")"; shift
+base="$(url_base "$url")"
 start "$@"

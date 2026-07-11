@@ -428,10 +428,6 @@ msgstr ""
 msgid "UDP STUN"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/natmap.js:536
-msgid "URI Scheme"
-msgstr ""
-
 #: htdocs/luci-static/resources/view/natmap.js:553
 msgid "Username"
 msgstr "用戶名"
@@ -440,9 +436,19 @@ msgstr "用戶名"
 msgid "Via natmap"
 msgstr "經由 natmap"
 
-#: htdocs/luci-static/resources/view/natmap.js:545
-msgid "Web UI Port"
-msgstr "Web UI 通訊埠"
+#: htdocs/luci-static/resources/view/natmap.js:539
+msgid "Web UI Address"
+msgstr "Web UI 位址"
+
+#: htdocs/luci-static/resources/view/natmap.js:540
+msgid ""
+"Full address of the client Web UI, including scheme and port. "
+"Reverse-proxy subpaths are supported; trailing slash is optional. "
+"e.g. https://qbittorrent.example.com/ or http://192.168.1.10:8080/qbt"
+msgstr ""
+"用戶端 Web UI 的完整位址，需包含協定與連接埠。"
+"支援反向代理子路徑，結尾斜線可有可無。"
+"如 https://qbittorrent.example.com/ 或 http://192.168.1.10:8080/qbt"
 
 #: htdocs/luci-static/resources/view/natmap.js:707
 msgid "Weight"

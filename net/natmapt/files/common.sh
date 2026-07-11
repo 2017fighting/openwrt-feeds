@@ -5,6 +5,16 @@
 
 CURL="$(command -v natmap-curl)"
 
+# url_base <url> — strip trailing '/' so callers can safely append '/path'.
+# Only trailing slashes are removed; the scheme's '//' is preserved, so
+# `url_base https://x/qbt/` -> `https://x/qbt` -> `https://x/qbt/api/...`.
+# POSIX-only (runs under busybox ash in the client scripts).
+url_base() {
+	local _u="$1"
+	while [ "$_u" != "${_u%/}" ]; do _u="${_u%/}"; done
+	printf '%s' "$_u"
+}
+
 # JSON_EXPORT <json>
 JSON_EXPORT() {
 	for k in $ALL_PARAMS; do

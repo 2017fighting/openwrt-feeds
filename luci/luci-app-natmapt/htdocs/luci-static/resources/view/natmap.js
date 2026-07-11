@@ -536,22 +536,22 @@ return view.extend({
 				o.value(etc_path + '/client/' + script.name, script.name);
 			});
 
-		o = s.taboption('forward', form.ListValue, 'clt_scheme', _('URI Scheme'));
-		o.value('http', 'HTTP');
-		o.value('https', 'HTTPS');
-		o.default = 'http';
+		o = s.taboption('forward', form.Value, 'clt_url', _('Web UI Address'),
+			_('Full address of the client Web UI, including scheme and port. '
+				+ 'Reverse-proxy subpaths are supported; trailing slash is optional. '
+				+ 'e.g. https://qbittorrent.example.com/ or http://192.168.1.10:8080/qbt'));
+		o.placeholder = 'https://qbittorrent.example.com/';
 		o.rmempty = false;
 		o.retain = true;
 		o.depends('refresh', '1');
 		o.modalonly = true;
-
-		o = s.taboption('forward', form.Value, 'clt_web_port', _('Web UI Port'));
-		o.datatype = "and(port, min(1))";
-		o.default = '8080';
-		o.rmempty = false;
-		o.retain = true;
-		o.depends('refresh', '1');
-		o.modalonly = true;
+		o.validate = function(section_id, value) {
+			if (!value)
+				return true;
+			if (!/^https?:\/\/.+/i.test(value))
+				return _('Must be an http:// or https:// URL');
+			return true;
+		};
 
 		o = s.taboption('forward', form.Value, 'clt_username', _('Username'));
 		o.rmempty = true;
