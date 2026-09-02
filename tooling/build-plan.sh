@@ -121,7 +121,7 @@ corelib_probe() {
 # BRIDGE_REF to that repo's pushed HEAD (see its docs/adr/0001).
 BRIDGE_FEED=nikki
 BRIDGE_REPO=https://github.com/2017fighting/OpenWrt-nikki.git
-BRIDGE_REF=229b5ffd517d3c6cb948369b6a94b640ee5f8810
+BRIDGE_REF=a280fa961a198a6f645a8827f792b4ce3f37621b
 BRIDGE_PKGS="mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-cn"
 
 # ---------------------------------------------------------------------------
