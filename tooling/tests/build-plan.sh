@@ -27,6 +27,10 @@ assert_eq "boost ref is the SDK-pinned strategy" \
 	"$(echo "$c" | sed -n 's/^corelib.boost.ref=//p')" "packages-feed-pinned"
 assert_eq "boost extra include" \
 	"$(echo "$c" | sed -n 's/^corelib.boost.extra=//p')" "lang/python/python3-version.mk"
+assert_eq "openssl feed landing spot is libs/ (not its repo path package/libs/)" \
+	"$(echo "$c" | sed -n 's/^corelib.openssl.feed_dest=//p')" "libs/openssl"
+assert_eq "boost feed landing spot" \
+	"$(echo "$c" | sed -n 's/^corelib.boost.feed_dest=//p')" "libs/boost"
 
 # ---- [install] — derived source set + corelib extras
 i=$(bp_section install)

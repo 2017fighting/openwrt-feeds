@@ -66,6 +66,14 @@ corelib_path() {
 	boost) echo "libs/boost" ;;
 	esac
 }
+# where the lib lands INSIDE this feed (differs from the repo path for
+# openssl: openwrt keeps it at package/libs/openssl, this feed wants libs/)
+corelib_dest() {
+	case "$1" in
+	openssl) echo "libs/openssl" ;;
+	boost) echo "libs/boost" ;;
+	esac
+}
 corelib_extra() {
 	case "$1" in
 	openssl) echo "" ;;
@@ -179,6 +187,7 @@ cmd_plan() {
 		echo "corelib.$lib.repo=$(corelib_repo "$lib")"
 		echo "corelib.$lib.ref=$(corelib_ref "$lib")"
 		echo "corelib.$lib.path=$(corelib_path "$lib")"
+		echo "corelib.$lib.feed_dest=$(corelib_dest "$lib")"
 		echo "corelib.$lib.extra=$(corelib_extra "$lib")"
 	done
 
@@ -250,6 +259,7 @@ cmd_corelibs() {
 			[ -n "$OPENWRT_VERSION" ] || die "OPENWRT_VERSION is required for the openssl corelib"
 			ref="v$OPENWRT_VERSION"
 			git clone --depth 1 --branch "$ref" --filter=blob:none --sparse "$repo" "$tmp"
+			git -C "$tmp" sparse-checkout set "$path"
 			;;
 		boost)
 			# The ref the SDK's own feeds.conf.default pins for the packages
@@ -266,7 +276,7 @@ cmd_corelibs() {
 			;;
 		esac
 		test -f "$tmp/$path/Makefile" || die "$lib: $path/Makefile not found at ref $ref"
-		dest="$FEED_ROOT/$path"
+		dest="$FEED_ROOT/$(corelib_dest "$lib")"
 		mkdir -p "$(dirname "$dest")"
 		rm -rf "$dest"
 		cp -r "$tmp/$path" "$dest"
@@ -333,8 +343,14 @@ cmd_compile() {
 		case $pkg in
 		mosdns)
 			(cd "$sdk" && make "package/feeds/$FEED_NAME/mosdns/compile" MOSDNS_GOARCH="$GOARCH" -j"$(nproc)" V=s)
-			bin=$(find "$sdk/build_dir" -path '*mosdns-*/mosdns' -type f | head -1)
+			# maxdepth 4 + ! '*/.*' pins the find to the go-build output
+			# (build_dir/target-*/mosdns-<ver>/mosdns); the .pkgdir/ and ipkg-*/
+			# copies deeper down include etc/init.d/mosdns, a SHELL script — an
+		# unbounded find | head -1 once raced onto it and "executed" the init
+		# script instead of the binary.
+			bin=$(find "$sdk/build_dir" -maxdepth 4 -type f -name mosdns ! -path '*/.*' | head -1)
 			[ -n "$bin" ] || die "mosdns binary not found in build_dir"
+			file "$bin" | grep -q ELF || die "mosdns smoke: $bin is not an ELF binary"
 			if [ "$GOARCH" = amd64 ]; then
 				"$bin" version # runner is amd64 -> execute directly
 			else
@@ -352,10 +368,11 @@ cmd_compile() {
 			# the SOURCE package compiles and packages all of them (splits
 			# share the source dir, no separate compile targets).
 			(cd "$sdk" && make "package/feeds/$FEED_NAME/natmapt/compile" -j"$(nproc)" V=s)
-			bin=$(find "$sdk/build_dir" -path '*natmap-*/bin/natmap' -type f | head -1)
+			bin=$(find "$sdk/build_dir" -maxdepth 4 -type f -path '*/natmap-*/bin/natmap' | head -1)
 			[ -n "$bin" ] || die "natmap binary not found in build_dir"
 			# Target-arch C binary: do NOT exec it (it binds ports and would
-			# hang the runner) — just confirm it compiled to ELF.
+			# hang the runner) — confirm it compiled to ELF.
+			file "$bin" | grep -q ELF || die "natmap smoke: $bin is not an ELF binary"
 			file "$bin"
 			;;
 		stuntman)
