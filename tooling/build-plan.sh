@@ -290,7 +290,12 @@ cmd_register() {
 	# runtime-only deps: the apk declares them and the device auto-installs
 	# them from its own repos.
 	if [ ! -f "$conf" ]; then
-		awk '$2 == "luci" || $2 == "base" {print}' "$sdk/feeds.conf.default" >"$conf" 2>/dev/null || true
+		# NB: the base line carries an option field: "src-git --root=package
+		# base <url>" — awk's $2 is "--root=package", the feed name sits in
+		# $3. Match both shapes.
+		awk '
+			$2 == "luci" || $2 == "base" || ($2 == "--root=package" && $3 == "base") {print}
+		' "$sdk/feeds.conf.default" >"$conf" 2>/dev/null || true
 		[ -s "$conf" ] || cp "$sdk/feeds.conf.default" "$conf"
 	fi
 	grep -qxF "src-link $FEED_NAME $FEED_ROOT" "$conf" ||
