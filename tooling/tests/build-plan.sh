@@ -56,8 +56,8 @@ got=$(echo "$i" | sed -n 's/^install.package=//p' | sort | tr '\n' ' ')
 assert_eq "install set == every Makefile dir under net/ and luci/" "$got" \
 	"luci-app-mosdns luci-app-natmapt mosdns natmapt stuntman "
 got=$(echo "$i" | sed -n 's/^install.bridge=//p' | tr '\n' ' ')
-assert_eq "bridge packages join the install set (from their own feed)" "$got" \
-	"mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-hans "
+assert_eq "bridge packages join the install set (i18n split ships with its app source)" "$got" \
+	"mihomo-alpha nikki luci-app-nikki "
 
 # ---- [config] — engine-off fragment present verbatim
 cfg=$(bp_section config)
@@ -90,7 +90,7 @@ echo "$p" | grep -q '^prefetch.stuntman\.' &&
 c=$(bp_section compile)
 got=$(echo "$c" | sed -n 's/^compile.target=package\/feeds\/[a-z]*\///p' | sed 's/\/compile$//' | tr '\n' ' ')
 assert_eq "compile order" "$got" \
-	"mosdns luci-app-mosdns natmapt stuntman luci-app-natmapt mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-hans "
+	"mosdns luci-app-mosdns natmapt stuntman luci-app-natmapt mihomo-alpha nikki luci-app-nikki "
 echo "$c" | grep -qx 'compile.target=package/feeds/nikki/mihomo-alpha/compile' &&
 	ok "bridge packages compile under the nikki feed target" ||
 	bad "bridge packages compile under the nikki feed target"

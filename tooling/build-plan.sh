@@ -166,7 +166,7 @@ _packages() {
 # Compile order. The set is derived (plan warns about anything unlisted); the
 # order is curated — the proven sequence, each luci app after its service
 # package, bridge stack last.
-COMPILE_ORDER="mosdns luci-app-mosdns natmapt stuntman luci-app-natmapt mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-hans"
+COMPILE_ORDER="mosdns luci-app-mosdns natmapt stuntman luci-app-natmapt mihomo-alpha nikki luci-app-nikki"
 
 # _prefetch <makefile> <pkg> — emit url=/dest= for one tarball package; skip
 # git-sourced packages (the SDK clones those itself). Git variant = has
@@ -231,7 +231,12 @@ cmd_plan() {
 	_header install
 	echo "install.extras=$(for lib in $CORELIBS; do corelib_installname "$lib"; done | tr '\n' ' ')"
 	for pkg in $(_packages); do echo "install.package=$pkg"; done
-	for pkg in $BRIDGE_PKGS; do echo "install.bridge=$pkg"; done
+	for pkg in $BRIDGE_PKGS; do
+		case $pkg in
+		luci-i18n-*) ;; # split: ships with its app source, not installable
+		*) echo "install.bridge=$pkg" ;;
+		esac
+	done
 
 	_header config
 	for lib in $CORELIBS; do corelib_config "$lib"; done
@@ -359,7 +364,12 @@ cmd_install() {
 	local sdk="$1" names="" lib pkg
 	for lib in $CORELIBS; do names="$names $(corelib_installname "$lib")"; done
 	for pkg in $(_packages); do names="$names $pkg"; done
-	for pkg in $BRIDGE_PKGS; do names="$names $pkg"; done
+	for pkg in $BRIDGE_PKGS; do
+		case $pkg in
+		luci-i18n-*) continue ;; # split of luci-app-nikki: built with its source
+		esac
+		names="$names $pkg"
+	done
 	step "feeds update + install:$names"
 	(
 		cd "$sdk"
@@ -507,12 +517,11 @@ cmd_compile() {
 			ls -l "$sdk/bin/packages/$ARCH/$BRIDGE_FEED"/nikki-*.apk
 			;;
 		luci-app-nikki)
+			# The source build also packages ALL i18n splits (ru, zh-hans,
+			# zh-hant) — splits have no compile target of their own (same as
+			# natmapt's script splits). Assert the one we ship for.
 			(cd "$sdk" && make "package/feeds/$BRIDGE_FEED/luci-app-nikki/compile" -j"$(nproc)" V=s)
 			ls -l "$sdk/bin/packages/$ARCH/$BRIDGE_FEED"/luci-app-nikki-*.apk
-			;;
-		luci-i18n-nikki-zh-hans)
-			# i18n split of luci-app-nikki (po/zh_Hans); PKGARCH:=all.
-			(cd "$sdk" && make "package/feeds/$BRIDGE_FEED/luci-i18n-nikki-zh-hans/compile" -j"$(nproc)" V=s)
 			ls -l "$sdk/bin/packages/$ARCH/$BRIDGE_FEED"/luci-i18n-nikki-zh-hans-*.apk
 			;;
 		*) die "no compile recipe for $pkg (extend cmd_compile)" ;;
