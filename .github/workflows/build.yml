@@ -107,9 +107,9 @@ jobs:
       # cannot leak across runs (a leaked feeds.conf caused a duplicate entry).
       - name: Extract SDK
         run: |
-          rm -rf "$GITHUB_WORKSPACE/sdk"
-          mkdir -p "$GITHUB_WORKSPACE/sdk"
-          tar -I zstd -xf "$GITHUB_WORKSPACE/sdk.tar.zst" -C "$GITHUB_WORKSPACE/sdk" --strip-components=1
+          rm -rf "$RUNNER_TEMP/sdk"
+          mkdir -p "$RUNNER_TEMP/sdk"
+          tar -I zstd -xf "$GITHUB_WORKSPACE/sdk.tar.zst" -C "$RUNNER_TEMP/sdk" --strip-components=1
 
       - name: Verify signing prerequisites
         env:
@@ -122,7 +122,7 @@ jobs:
         env:
           APK_SIGN_KEY: ${{ secrets.APK_SIGN_KEY }}
         run: |
-          SDK="$GITHUB_WORKSPACE/sdk"
+          SDK="$RUNNER_TEMP/sdk"
           # OpenWrt signs the apk index with an openssl EC (prime256v1) key:
           #   BUILD_KEY_APK_SEC=$(TOPDIR)/private-key.pem
           #   BUILD_KEY_APK_PUB=$(TOPDIR)/public-key.pem
@@ -142,7 +142,7 @@ jobs:
           OPENWRT_VERSION: ${{ matrix.openwrt_version }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          SDK="$GITHUB_WORKSPACE/sdk"
+          SDK="$RUNNER_TEMP/sdk"
           sh tooling/build-plan.sh register "$SDK"
           sh tooling/build-plan.sh corelibs "$SDK"
           sh tooling/build-plan.sh install "$SDK"
@@ -154,17 +154,17 @@ jobs:
           ARCH: ${{ matrix.arch }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          SDK="$GITHUB_WORKSPACE/sdk"
+          SDK="$RUNNER_TEMP/sdk"
           sh tooling/build-plan.sh compile "$SDK"
           sh tooling/build-plan.sh verify "$SDK"
 
       - name: Generate repository index
-        working-directory: ${{ github.workspace }}/sdk
+        working-directory: ${{ runner.temp }}/sdk
         run: make package/index -j1 V=s
 
       - name: Sign index (apk adbsign)
         run: |
-          SDK="$GITHUB_WORKSPACE/sdk"
+          SDK="$RUNNER_TEMP/sdk"
           OUT="$SDK/bin/packages/${{ matrix.arch }}/$FEED_NAME"
           APK="$SDK/staging_dir/host/bin/apk"
           [ -f "$OUT/packages.adb" ] || { echo "::error::packages.adb was not generated"; ls -R "$SDK/bin/packages"; exit 1; }
@@ -180,7 +180,7 @@ jobs:
 
       - name: Assemble site slice
         run: |
-          SDK="$GITHUB_WORKSPACE/sdk"
+          SDK="$RUNNER_TEMP/sdk"
           OUT="$SDK/bin/packages/${{ matrix.arch }}/$FEED_NAME"
           DEST="site/${{ matrix.openwrt_version }}/${{ matrix.arch }}"
           mkdir -p "$DEST"

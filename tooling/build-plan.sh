@@ -367,9 +367,18 @@ cmd_install() {
 		# fail HERE, not five minutes later at compile. Split packages
 		# (libopenssl -> openssl, luci-i18n-nikki-zh-hans -> luci-app-nikki)
 		# stage under their SOURCE name, so assert on the source set.
-		for pkg in openssl boost golang $(_packages) mihomo-alpha nikki luci-app-nikki; do
+		for pkg in openssl boost golang $(_packages); do
 			ls -d "$sdk"/package/feeds/*/$pkg >/dev/null 2>&1 ||
 				die "feeds install did not stage $pkg (metadata dump or name mismatch)"
+		done
+		# Bridge packages must stage under the BRIDGE feed specifically — a
+		# duplicate index entry (e.g. the SDK tree living inside the src-link
+		# checkout) makes feeds install pick the wrong feed and every
+		# package/feeds/$BRIDGE_FEED/... compile target goes missing.
+		for pkg in $BRIDGE_PKGS; do
+			case $pkg in luci-i18n-*) continue ;; esac # split: staged under its app
+			ls -d "$sdk/package/feeds/$BRIDGE_FEED/$pkg" >/dev/null 2>&1 ||
+				die "$pkg not staged under feed $BRIDGE_FEED (duplicate index entry?)"
 		done
 	)
 }
