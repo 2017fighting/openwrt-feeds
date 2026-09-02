@@ -22,3 +22,18 @@ names a concept that code, docs, and conversation should share.
   perms, atomicity). Consumers: `/etc/init.d/natmap` (clear),
   `/usr/lib/natmap/update.sh` (publish), external readers via the public URL
   `/natmap/<name>.json` served by uhttpd.
+
+## CI
+
+- **Build plan** — the derived description of what CI builds inside the
+  OpenWrt SDK and how: source package names (from every Makefile dir under
+  `net/` and `luci/`), compile order, tarball pre-fetch URLs (expanded from
+  Make variables), the corelib workarounds (boost/openssl sparse checkouts,
+  the `.config` seed) and the apk verification globs. The **build plan
+  module** is `tooling/build-plan.sh`; `build-plan.sh plan` is its hermetic
+  dry-run and its test surface (`tooling/tests/` asserts it against the
+  Makefiles). The workflow supplies only the matrix (from `feeds.config`) and
+  the two secret-touching steps (key install, `apk adbsign`) — secrets never
+  enter the module. A **corelib** is a core library the SDK cannot build
+  (boost, openssl), declared once in the module's static corelib table and
+  pulled into the feed at CI time.
