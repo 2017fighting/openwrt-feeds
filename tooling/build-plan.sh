@@ -364,9 +364,10 @@ cmd_install() {
 		# shellcheck disable=SC2086
 		./scripts/feeds install $names
 		# feeds install silently skips a name missing from every feed index —
-		# fail HERE, not five minutes later at compile with "no rule to make
-		# target package/feeds/<feed>/<pkg>/compile".
-		for pkg in $names; do
+		# fail HERE, not five minutes later at compile. Split packages
+		# (libopenssl -> openssl, luci-i18n-nikki-zh-hans -> luci-app-nikki)
+		# stage under their SOURCE name, so assert on the source set.
+		for pkg in openssl boost golang $(_packages) mihomo-alpha nikki luci-app-nikki; do
 			ls -d "$sdk"/package/feeds/*/$pkg >/dev/null 2>&1 ||
 				die "feeds install did not stage $pkg (metadata dump or name mismatch)"
 		done
