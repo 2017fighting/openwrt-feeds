@@ -144,7 +144,7 @@ _prefetch() {
 	[ -n "$url" ] && [ -n "$src" ] || return 0
 	case "${url##*/}" in
 	*.tar.gz | *.tgz | *.tar.xz | *.tar.bz2 | *.zip) ;; # URL already names the tarball
-	*) url="$url/$src" ;;                                 # dir-style URL: append the filename
+	*) url="$url/$src" ;;                               # dir-style URL: append the filename
 	esac
 	printf 'prefetch.%s.url=%s\nprefetch.%s.dest=dl/%s\n' "$pkg" "$url" "$pkg" "$src"
 }
@@ -391,12 +391,33 @@ cmd_verify() {
 
 case "${1:-}" in
 plan) cmd_plan ;;
-register) [ $# -eq 2 ] || die "usage: build-plan.sh register <sdk-dir>"; cmd_register "$2" ;;
-corelibs) [ $# -eq 2 ] || die "usage: build-plan.sh corelibs <sdk-dir>"; cmd_corelibs "$2" ;;
-install) [ $# -eq 2 ] || die "usage: build-plan.sh install <sdk-dir>"; cmd_install "$2" ;;
-config) [ $# -eq 2 ] || die "usage: build-plan.sh config <sdk-dir>"; cmd_config "$2" ;;
-prefetch) [ $# -eq 2 ] || die "usage: build-plan.sh prefetch <sdk-dir>"; cmd_prefetch "$2" ;;
-compile) [ $# -eq 2 ] || die "usage: build-plan.sh compile <sdk-dir>"; cmd_compile "$2" ;;
-verify) [ $# -eq 2 ] || die "usage: build-plan.sh verify <sdk-dir>"; cmd_verify "$2" ;;
+register)
+	[ $# -eq 2 ] || die "usage: build-plan.sh register <sdk-dir>"
+	cmd_register "$2"
+	;;
+corelibs)
+	[ $# -eq 2 ] || die "usage: build-plan.sh corelibs <sdk-dir>"
+	cmd_corelibs "$2"
+	;;
+install)
+	[ $# -eq 2 ] || die "usage: build-plan.sh install <sdk-dir>"
+	cmd_install "$2"
+	;;
+config)
+	[ $# -eq 2 ] || die "usage: build-plan.sh config <sdk-dir>"
+	cmd_config "$2"
+	;;
+prefetch)
+	[ $# -eq 2 ] || die "usage: build-plan.sh prefetch <sdk-dir>"
+	cmd_prefetch "$2"
+	;;
+compile)
+	[ $# -eq 2 ] || die "usage: build-plan.sh compile <sdk-dir>"
+	cmd_compile "$2"
+	;;
+verify)
+	[ $# -eq 2 ] || die "usage: build-plan.sh verify <sdk-dir>"
+	cmd_verify "$2"
+	;;
 *) die "usage: build-plan.sh plan|register|corelibs|install|config|prefetch|compile|verify <sdk-dir>" ;;
 esac
