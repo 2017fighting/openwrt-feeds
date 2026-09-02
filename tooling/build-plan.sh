@@ -152,9 +152,9 @@ _prefetch() {
 	[ -n "$url" ] && [ -n "$src" ] || return 0
 	case "${url##*/}" in
 	*.tar.gz | *.tgz | *.tar.xz | *.tar.bz2 | *.zip) ;; # URL already names the tarball
-	*) url="$url/$src" ;;                               # dir-style URL: append the filename
+	*) url="$url/$src" ;; # dir-style URL: append the filename
 	esac
-	printf 'prefetch.%s.url=%s\nprefetch.%s.dest=dl/%s\n' "$pkg" "$url" "$pkg" "$src"
+	printf '%s|%s|dl/%s\n' "$pkg" "$url" "$src"
 }
 
 # ---------------------------------------------------------------------------
@@ -199,10 +199,13 @@ cmd_plan() {
 	for lib in $CORELIBS; do corelib_config "$lib"; done
 
 	_header prefetch
-	for pkg in $(_packages); do
+	pairs=$(for pkg in $(_packages); do
 		if [ -f "$FEED_ROOT/net/$pkg/Makefile" ]; then
 			_prefetch "$FEED_ROOT/net/$pkg/Makefile" "$pkg"
 		fi
+	done)
+	printf '%s\n' "$pairs" | while IFS='|' read -r pkg u d; do
+		printf 'prefetch.%s.url=%s\nprefetch.%s.dest=%s\n' "$pkg" "$u" "$pkg" "$d"
 	done
 
 	_header compile
@@ -318,16 +321,19 @@ cmd_config() {
 }
 
 cmd_prefetch() {
-	local sdk="$1" plan pkg u dest
+	local sdk="$1" pkg mf u dest pairs
 	step "pre-fetch declared tarballs into dl/"
 	# The SDK's default fetcher only probes the OpenWrt source mirrors (which
 	# 404 for custom packages). Pre-populate dl/ with the exact tarball each
-	# Makefile declares; PKG_HASH verifies it on extract.
+	# Makefile declares; PKG_HASH verifies it on extract. The pairs come from
+	# the same derivation plan prints (never a second copy of the URLs).
 	mkdir -p "$sdk/dl"
-	plan=$(FEED_ROOT="$FEED_ROOT" "$0" plan)
-	echo "$plan" | sed -n 's/^prefetch\.\([^.]*\)\.url=/\1 /p' | while IFS=' ' read -r pkg u; do
-		dest=$(echo "$plan" | sed -n "s/^prefetch\.$pkg\.dest=//p")
-		[ -n "$dest" ] || die "prefetch: no dest for $pkg"
+	pairs=$(for pkg in $(_packages); do
+		mf="$FEED_ROOT/net/$pkg/Makefile"
+		[ -f "$mf" ] || continue
+		_prefetch "$mf" "$pkg"
+	done)
+	printf '%s\n' "$pairs" | while IFS='|' read -r pkg u dest; do
 		echo "fetch $u -> $sdk/$dest"
 		curl -fL "$u" -o "$sdk/$dest"
 		sha256sum "$sdk/$dest"
@@ -346,8 +352,8 @@ cmd_compile() {
 			# maxdepth 4 + ! '*/.*' pins the find to the go-build output
 			# (build_dir/target-*/mosdns-<ver>/mosdns); the .pkgdir/ and ipkg-*/
 			# copies deeper down include etc/init.d/mosdns, a SHELL script — an
-		# unbounded find | head -1 once raced onto it and "executed" the init
-		# script instead of the binary.
+			# unbounded find | head -1 once raced onto it and "executed" the init
+			# script instead of the binary.
 			bin=$(find "$sdk/build_dir" -maxdepth 4 -type f -name mosdns ! -path '*/.*' | head -1)
 			[ -n "$bin" ] || die "mosdns binary not found in build_dir"
 			file "$bin" | grep -q ELF || die "mosdns smoke: $bin is not an ELF binary"
