@@ -32,6 +32,17 @@ env:
   GO_VERSION: '1.26'
 
 jobs:
+  # Fast host-side gate: exercises the shell modules (section status store)
+  # with stubbed jshn/jsonfilter adapters — no SDK needed. Runs once (not per
+  # matrix shard); the build job waits on it so a failure fails fast.
+  tests:
+    name: Host tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Section status store tests
+        run: sh tooling/tests/run.sh
+
   # Read feeds.config and emit the matrix as JSON. Adding a version/arch is now
   # a one-line change in feeds.config — no workflow edit needed.
   matrix:
@@ -49,7 +60,7 @@ jobs:
 
   build:
     name: Build ${{ matrix.openwrt_version }} / ${{ matrix.arch }}
-    needs: [matrix]
+    needs: [matrix, tests]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -66,9 +77,9 @@ jobs:
 
       - name: Expose Go to the SDK build environment
         run: |
-          echo "$(go env GOROOT)/bin" >> $GITHUB_PATH
-          echo "GOROOT=$(go env GOROOT)" >> $GITHUB_ENV
-          echo "GOPATH=$(go env GOPATH)" >> $GITHUB_ENV
+          echo "$(go env GOROOT)/bin" >> "$GITHUB_PATH"
+          echo "GOROOT=$(go env GOROOT)" >> "$GITHUB_ENV"
+          echo "GOPATH=$(go env GOPATH)" >> "$GITHUB_ENV"
           go version
 
       - name: Compute SDK URL

@@ -8,9 +8,9 @@ PKG_UPSTREAM_NAME:=natmap
 PKG_NAME:=natmapt
 PKG_UPSTREAM_VERSION:=20260214
 PKG_UPSTREAM_GITHASH:=
-# pi-lens-ignore: SC1072
+# pi-lens-ignore: SC1073
 # pi-lens-ignore: SC1050
-# pi-lens-ignore: SC1073, SC1050
+# pi-lens-ignore: SC1072
 PKG_VERSION:=$(PKG_UPSTREAM_VERSION)$(if $(PKG_UPSTREAM_GITHASH),~$(call version_abbrev,$(PKG_UPSTREAM_GITHASH)))
 PKG_RELEASE:=6
 SCRIPTS_VERSION:=0.2026.01.24
