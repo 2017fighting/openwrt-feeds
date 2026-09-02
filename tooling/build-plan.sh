@@ -152,7 +152,7 @@ _prefetch() {
 	[ -n "$url" ] && [ -n "$src" ] || return 0
 	case "${url##*/}" in
 	*.tar.gz | *.tgz | *.tar.xz | *.tar.bz2 | *.zip) ;; # URL already names the tarball
-	*) url="$url/$src" ;; # dir-style URL: append the filename
+	*) url="$url/$src" ;;                               # dir-style URL: append the filename
 	esac
 	printf '%s|%s|dl/%s\n' "$pkg" "$url" "$src"
 }
@@ -349,13 +349,13 @@ cmd_compile() {
 		case $pkg in
 		mosdns)
 			(cd "$sdk" && make "package/feeds/$FEED_NAME/mosdns/compile" MOSDNS_GOARCH="$GOARCH" -j"$(nproc)" V=s)
-			# maxdepth 4 + ! '*/.*' pins the find to the go-build output
-			# (build_dir/target-*/mosdns-<ver>/mosdns); the .pkgdir/ and ipkg-*/
-			# copies deeper down include etc/init.d/mosdns, a SHELL script — an
-			# unbounded find | head -1 once raced onto it and "executed" the init
-			# script instead of the binary.
-			bin=$(find "$sdk/build_dir" -maxdepth 4 -type f -name mosdns ! -path '*/.*' | head -1)
-			[ -n "$bin" ] || die "mosdns binary not found in build_dir"
+			# Smoke the .pkgdir copy — the packaged binary that actually ships.
+			# The SDK's AUTOREMOVE deletes the pristine go-build output after
+			# packaging (.autoremove marker), so only the dot-dir .pkgdir copy
+			# survives; an unbounded find once raced onto .pkgdir's
+			# etc/init.d/mosdns (a SHELL script) and "executed" that instead.
+			bin=$(find "$sdk/build_dir" -type f -path '*/mosdns-*/.pkgdir/mosdns/usr/bin/mosdns' | head -1)
+			[ -n "$bin" ] || die "mosdns binary not found in build_dir (expected the .pkgdir copy)"
 			file "$bin" | grep -q ELF || die "mosdns smoke: $bin is not an ELF binary"
 			if [ "$GOARCH" = amd64 ]; then
 				"$bin" version # runner is amd64 -> execute directly
@@ -374,8 +374,10 @@ cmd_compile() {
 			# the SOURCE package compiles and packages all of them (splits
 			# share the source dir, no separate compile targets).
 			(cd "$sdk" && make "package/feeds/$FEED_NAME/natmapt/compile" -j"$(nproc)" V=s)
-			bin=$(find "$sdk/build_dir" -maxdepth 4 -type f -path '*/natmap-*/bin/natmap' | head -1)
-			[ -n "$bin" ] || die "natmap binary not found in build_dir"
+			# Smoke the .pkgdir copy (the SDK's AUTOREMOVE deletes the pristine
+			# build output after packaging — see the mosdns branch).
+			bin=$(find "$sdk/build_dir" -type f -path '*/natmap-*/.pkgdir/natmapt/usr/bin/natmap' | head -1)
+			[ -n "$bin" ] || die "natmap binary not found in build_dir (expected the .pkgdir copy)"
 			# Target-arch C binary: do NOT exec it (it binds ports and would
 			# hang the runner) — confirm it compiled to ELF.
 			file "$bin" | grep -q ELF || die "natmap smoke: $bin is not an ELF binary"
