@@ -46,7 +46,7 @@ assert_eq "bridge ref is a full commit sha (reproducible)" \
 	"$(echo "$b" | sed -n 's/^bridge.ref=//p' | grep -cE '^[0-9a-f]{40}$')" "1"
 got=$(echo "$b" | sed -n 's/^bridge.package=//p' | sort | tr '\n' ' ')
 assert_eq "bridge package set" "$got" \
-	"luci-app-nikki luci-i18n-nikki-zh-hans mihomo-alpha nikki "
+	"luci-app-nikki luci-i18n-nikki-zh-cn mihomo-alpha nikki "
 
 # ---- [install] — derived source set + corelib extras
 i=$(bp_section install)
@@ -113,7 +113,7 @@ assert_eq "GOARCH env flows into the plan" \
 v=$(bp_section verify)
 gfail=0
 for g in mosdns luci-app-mosdns natmapt stuntman-client luci-app-natmapt \
-	mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-hans; do
+	mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-cn; do
 	echo "$v" | grep -Fxq "verify.apk=$g-*.apk" || {
 		bad "verify glob present: $g"
 		gfail=1

@@ -122,7 +122,7 @@ corelib_probe() {
 BRIDGE_FEED=nikki
 BRIDGE_REPO=https://github.com/2017fighting/OpenWrt-nikki.git
 BRIDGE_REF=229b5ffd517d3c6cb948369b6a94b640ee5f8810
-BRIDGE_PKGS="mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-hans"
+BRIDGE_PKGS="mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-cn"
 
 # ---------------------------------------------------------------------------
 # Derivation from the feed's own Makefiles.
@@ -272,7 +272,7 @@ cmd_plan() {
 
 	_header verify
 	echo "verify.out=bin/packages/\${ARCH}/$FEED_NAME"
-	for g in mosdns luci-app-mosdns natmapt stuntman-client luci-app-natmapt mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-hans; do
+	for g in mosdns luci-app-mosdns natmapt stuntman-client luci-app-natmapt mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-cn; do
 		echo "verify.apk=$g-*.apk"
 	done
 }
@@ -388,7 +388,7 @@ cmd_install() {
 		./scripts/feeds install $names
 		# feeds install silently skips a name missing from every feed index —
 		# fail HERE, not five minutes later at compile. Split packages
-		# (libopenssl -> openssl, luci-i18n-nikki-zh-hans -> luci-app-nikki)
+		# (libopenssl -> openssl, luci-i18n-nikki-zh-cn -> luci-app-nikki)
 		# stage under their SOURCE name, so assert on the source set.
 		for pkg in openssl boost golang $(_packages); do
 			ls -d "$sdk"/package/feeds/*/$pkg >/dev/null 2>&1 ||
@@ -522,7 +522,7 @@ cmd_compile() {
 			# natmapt's script splits). Assert the one we ship for.
 			(cd "$sdk" && make "package/feeds/$BRIDGE_FEED/luci-app-nikki/compile" -j"$(nproc)" V=s)
 			ls -l "$sdk/bin/packages/$ARCH/$BRIDGE_FEED"/luci-app-nikki-*.apk
-			ls -l "$sdk/bin/packages/$ARCH/$BRIDGE_FEED"/luci-i18n-nikki-zh-hans-*.apk
+			ls -l "$sdk/bin/packages/$ARCH/$BRIDGE_FEED"/luci-i18n-nikki-zh-cn-*.apk
 			;;
 		*) die "no compile recipe for $pkg (extend cmd_compile)" ;;
 		esac
@@ -544,7 +544,7 @@ cmd_verify() {
 	[ -n "$ARCH" ] || die "ARCH is required for compile/verify"
 	out="$sdk/bin/packages/$ARCH/$FEED_NAME"
 	step "verify apks in $out"
-	for g in mosdns luci-app-mosdns natmapt stuntman-client luci-app-natmapt mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-hans; do
+	for g in mosdns luci-app-mosdns natmapt stuntman-client luci-app-natmapt mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-cn; do
 		# natmapt-* also covers its script splits; the rest are one apk each
 		# (or PKGARCH:=all, indexed under every arch slice).
 		ls -l "$out"/$g-*.apk || fails=$((fails + 1))
