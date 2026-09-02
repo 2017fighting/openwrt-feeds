@@ -1,6 +1,9 @@
 #!/bin/bash /etc/rc.common
 
 . "${IPKG_INSTROOT}/lib/functions/network.sh"
+# Section status store: owns the status schema, paths and cleanup
+# (/usr/lib/natmap/status.sh — its header is the normative contract).
+. "${IPKG_INSTROOT}/usr/lib/natmap/status.sh"
 
 START=97
 STOP=90
@@ -12,9 +15,6 @@ NAME=natmap
 GLOBALSECTION=global
 NATMAPSECTION=natmap
 PROG=/usr/bin/$NAME
-
-STATUS_PATH=/var/run/natmap
-PUBLIC_STATUS_PATH=/www/natmap
 
 config_load "$NAME"
 
@@ -306,30 +306,6 @@ natmap_instance() {
 	procd_close_instance
 }
 
-# _clear_status_dir <dir> [sid] — remove all <dir>/*.json, or just the one whose
-# ".sid" field matches. The public filename may be name- or sid-based, so match
-# by content rather than by filename.
-_clear_status_dir() {
-	local dir="$1" sid="$2" f
-
-	mkdir -p "${dir}" 2>/dev/null
-	pushd "${dir}" >/dev/null
-	if [ -n "$sid" ]; then
-		for f in *.json; do
-			[ "$(jsonfilter -q -i $f -e '@.sid')" = "$sid" ] || continue
-			rm -f $f; break
-		done
-	else
-		find . -type f -print0 | xargs -0 rm -f --
-	fi
-	popd >/dev/null
-}
-
-clear_status_files() {
-	_clear_status_dir "$STATUS_PATH" "$1"
-	_clear_status_dir "$PUBLIC_STATUS_PATH" "$1"
-}
-
 # err_msg__empty <section> <option>
 err_msg__empty() {
 	>&2 echo "$(basename $0): section $1 option $2 cannot be empty"
@@ -465,17 +441,17 @@ start_service() {
 	[ "${GLOBAL_enable:=0}" == "0" ] && return 1
 
 	if [ -n "$sid" ]; then
-		clear_status_files "$sid"
+		status_clear "$sid"
 		validate_section_natmap "$sid" launcher
 	else
-		clear_status_files
+		status_clear
 		config_foreach validate_section_natmap "$NATMAPSECTION" launcher
 	fi
 }
 
 stop_service() {
 	local sid="$1"
-	clear_status_files "$sid"
+	status_clear "$sid"
 }
 
 reload_service() {

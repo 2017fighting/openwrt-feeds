@@ -8,8 +8,11 @@ PKG_UPSTREAM_NAME:=natmap
 PKG_NAME:=natmapt
 PKG_UPSTREAM_VERSION:=20260214
 PKG_UPSTREAM_GITHASH:=
+# pi-lens-ignore: SC1072
+# pi-lens-ignore: SC1050
+# pi-lens-ignore: SC1073, SC1050
 PKG_VERSION:=$(PKG_UPSTREAM_VERSION)$(if $(PKG_UPSTREAM_GITHASH),~$(call version_abbrev,$(PKG_UPSTREAM_GITHASH)))
-PKG_RELEASE:=5
+PKG_RELEASE:=6
 SCRIPTS_VERSION:=0.2026.01.24
 
 PKG_SOURCE_SUBDIR:=$(PKG_UPSTREAM_NAME)-$(PKG_UPSTREAM_VERSION)
@@ -69,6 +72,7 @@ define Package/natmapt/install
 	$(INSTALL_DIR) $(1)/usr/lib/natmap/
 	$(INSTALL_BIN) ./files/natmap-update.sh $(1)/usr/lib/natmap/update.sh
 	$(INSTALL_BIN) ./files/common.sh $(1)/usr/lib/natmap/common.sh
+	$(INSTALL_BIN) ./files/status.sh $(1)/usr/lib/natmap/status.sh
 	$(INSTALL_DIR) $(1)/etc/config/
 	$(INSTALL_CONF) ./files/natmap.config $(1)/etc/config/natmap
 	$(INSTALL_DIR) $(1)/etc/init.d/
