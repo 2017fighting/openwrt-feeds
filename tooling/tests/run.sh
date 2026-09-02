@@ -145,6 +145,9 @@ n_after=$(find "$PRIV" "$PUB" -type f | wc -l | tr -d ' ')
 assert_eq "wrong arity writes nothing" "$n_after" "$n_before"
 
 # ------------------------------------------------------------- summary
+# ---- build plan suite (derived CI knowledge vs the Makefiles) ---------
+. "$ROOT/tooling/tests/build-plan.sh"
+
 echo "----------------------------------------"
 echo "passed: $pass, failed: $fails"
 [ "$fails" -eq 0 ]
