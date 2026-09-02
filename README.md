@@ -7,7 +7,7 @@ Pages.
 - **OpenWrt version:** 25.12.4 (APK package manager)
 - **Architectures:** `x86_64`, `aarch64_generic`
 - **Live binary feed:** <https://2017fighting.github.io/openwrt-feeds/25.12.4/>
-- **Packages:** `mosdns` + `luci-app-mosdns` (plugin-based DNS forwarder + LuCI app; <https://github.com/IrineSistiana/mosdns>), `natmapt` + `luci-app-natmapt` (TCP/UDP port mapping for full-cone NAT + LuCI app; <https://github.com/heiher/natmap>), and `stuntman-client` (STUN client used by natmapt's NAT-type test; <https://github.com/jselbie/stunserver>)
+- **Packages:** `mosdns` + `luci-app-mosdns` (plugin-based DNS forwarder + LuCI app; <https://github.com/IrineSistiana/mosdns>), `natmapt` + `luci-app-natmapt` (TCP/UDP port mapping for full-cone NAT + LuCI app; <https://github.com/heiher/natmap>), `stuntman-client` (STUN client used by natmapt's NAT-type test; <https://github.com/jselbie/stunserver>), and the **nikki stack** — `mihomo-alpha` (built from the personal mihomo fork: preferred-ip + heybox, pinned commit, x86-v3 on x86_64) + `nikki` + `luci-app-nikki` — bridged from <https://github.com/2017fighting/OpenWrt-nikki> via a pinned src-git feed
 - **Quick install:** `sh -c "$(wget -O- https://2017fighting.github.io/openwrt-feeds/feed.sh)"`
 
 This repository is **both** the source feed (OpenWrt package `Makefile`s on

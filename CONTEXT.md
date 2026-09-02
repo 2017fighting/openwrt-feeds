@@ -23,6 +23,16 @@ names a concept that code, docs, and conversation should share.
   `/usr/lib/natmap/update.sh` (publish), external readers via the public URL
   `/natmap/<name>.json` served by uhttpd.
 
+## nikki 栈
+
+- **三件套** — `mihomo-alpha`（源自 2017fighting/mihomo fork）+
+  `nikki` + `luci-app-nikki`。本 feed 全量提供这三包，设备侧不再混用
+  官方 nikki feed，`mihomo` 虚拟包因此只有单一提供者。
+
+- **桥（nikki bridge）** — build plan 在 SDK `feeds.conf` 里写入的一行钉住
+  commit 的 `src-git nikki`：指向 `2017fighting/OpenWrt-nikki`，三件套的
+  Makefile 只在那边维护，本仓库不拷贝包目录。升级 = bump 桥上的 commit。
+
 ## CI
 
 - **Build plan** — the derived description of what CI builds inside the

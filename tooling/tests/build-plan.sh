@@ -13,7 +13,7 @@ assert_eq "feed name default" \
 echo "$plan" | grep -q "^src_link=src-link openwrtfeeds $ROOT\$" &&
 	ok "src_link points at the repo root" || bad "src_link points at the repo root"
 assert_eq "feeds.conf policy" \
-	"$(echo "$plan" | sed -n 's/^feeds_conf_policy=//p')" "luci-only+this-feed"
+	"$(echo "$plan" | sed -n 's/^feeds_conf_policy=//p')" "luci-only+this-feed+nikki-bridge"
 
 # ---- [corelibs] — strategy-level refs only (Q11)
 c=$(bp_section corelibs)
@@ -31,14 +31,33 @@ assert_eq "openssl feed landing spot is libs/ (not its repo path package/libs/)"
 	"$(echo "$c" | sed -n 's/^corelib.openssl.feed_dest=//p')" "libs/openssl"
 assert_eq "boost feed landing spot" \
 	"$(echo "$c" | sed -n 's/^corelib.boost.feed_dest=//p')" "libs/boost"
+assert_eq "golang repo (borrowed like boost)" \
+	"$(echo "$c" | sed -n 's/^corelib.golang.repo=//p')" "https://github.com/openwrt/packages.git"
+assert_eq "golang ref is the SDK-pinned strategy" \
+	"$(echo "$c" | sed -n 's/^corelib.golang.ref=//p')" "packages-feed-pinned"
+assert_eq "golang stays at its repo path (bundle, not single package)" \
+	"$(echo "$c" | sed -n 's/^corelib.golang.feed_dest=//p')" "lang/golang"
+
+# ---- [bridge] — the pinned second feed carrying the nikki stack
+b=$(bp_section bridge)
+assert_eq "bridge repo" "$(echo "$b" | sed -n 's/^bridge.repo=//p')" \
+	"https://github.com/2017fighting/OpenWrt-nikki.git"
+assert_eq "bridge ref is a full commit sha (reproducible)" \
+	"$(echo "$b" | sed -n 's/^bridge.ref=//p' | grep -cE '^[0-9a-f]{40}$')" "1"
+got=$(echo "$b" | sed -n 's/^bridge.package=//p' | sort | tr '\n' ' ')
+assert_eq "bridge package set" "$got" \
+	"luci-app-nikki luci-i18n-nikki-zh-hans mihomo-alpha nikki "
 
 # ---- [install] — derived source set + corelib extras
 i=$(bp_section install)
 assert_eq "corelib install extras" \
-	"$(echo "$i" | sed -n 's/^install.extras=//p')" "libopenssl boost "
+	"$(echo "$i" | sed -n 's/^install.extras=//p')" "libopenssl boost golang "
 got=$(echo "$i" | sed -n 's/^install.package=//p' | sort | tr '\n' ' ')
 assert_eq "install set == every Makefile dir under net/ and luci/" "$got" \
 	"luci-app-mosdns luci-app-natmapt mosdns natmapt stuntman "
+got=$(echo "$i" | sed -n 's/^install.bridge=//p' | tr '\n' ' ')
+assert_eq "bridge packages join the install set (from their own feed)" "$got" \
+	"mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-hans "
 
 # ---- [config] — engine-off fragment present verbatim
 cfg=$(bp_section config)
@@ -69,9 +88,18 @@ echo "$p" | grep -q '^prefetch.stuntman\.' &&
 
 # ---- [compile] — curated order, no unlisted packages
 c=$(bp_section compile)
-got=$(echo "$c" | sed -n 's/^compile.target=package\/feeds\/openwrtfeeds\///p' | sed 's/\/compile$//' | tr '\n' ' ')
+got=$(echo "$c" | sed -n 's/^compile.target=package\/feeds\/[a-z]*\///p' | sed 's/\/compile$//' | tr '\n' ' ')
 assert_eq "compile order" "$got" \
-	"mosdns luci-app-mosdns natmapt stuntman luci-app-natmapt "
+	"mosdns luci-app-mosdns natmapt stuntman luci-app-natmapt mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-hans "
+echo "$c" | grep -qx 'compile.target=package/feeds/nikki/mihomo-alpha/compile' &&
+	ok "bridge packages compile under the nikki feed target" ||
+	bad "bridge packages compile under the nikki feed target"
+echo "$c" | grep -q '^compile.bridge_relocate=nikki/' &&
+	ok "bridge apk relocation is declared in the plan" ||
+	bad "bridge apk relocation is declared in the plan"
+echo "$c" | grep -q '^compile.unlisted=' &&
+	bad "every derived package has a compile slot" ||
+	ok "every derived package has a compile slot"
 echo "$c" | grep -q '^compile.unlisted=' &&
 	bad "every derived package has a compile slot" ||
 	ok "every derived package has a compile slot"
@@ -84,13 +112,14 @@ assert_eq "GOARCH env flows into the plan" \
 # ---- [verify] — apk globs, natmapt-* covering its splits
 v=$(bp_section verify)
 gfail=0
-for g in mosdns luci-app-mosdns natmapt stuntman-client luci-app-natmapt; do
+for g in mosdns luci-app-mosdns natmapt stuntman-client luci-app-natmapt \
+	mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-hans; do
 	echo "$v" | grep -Fxq "verify.apk=$g-*.apk" || {
 		bad "verify glob present: $g"
 		gfail=1
 	}
 done
-[ "$gfail" -eq 0 ] && ok "all five verify globs present"
+[ "$gfail" -eq 0 ] && ok "all nine verify globs present"
 
 # ---- CLI guards
 if sh "$BP" bogus >/dev/null 2>&1; then

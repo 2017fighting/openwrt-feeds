@@ -9,7 +9,8 @@
 # Subcommands:
 #   plan                    hermetic dry-run: print the derived plan as
 #                           line-oriented key=value grouped by [section]
-#   register   <sdk-dir>    seed feeds.conf (luci only + this repo), idempotent
+#   register   <sdk-dir>    seed feeds.conf (luci only + this repo + nikki
+#                           bridge), idempotent
 #   corelibs   <sdk-dir>    sparse-checkout boost + openssl into this feed
 #   install    <sdk-dir>    feeds update -a + install the derived source names
 #   config     <sdk-dir>    write the .config seed and run make defconfig
@@ -46,24 +47,31 @@ GOARCH=${GOARCH:-amd64}
 #            resolved in corelibs, shown as a strategy in plan). Also fetches
 #            lang/python/python3-version.mk, boost's relative include.
 # The same rows drive corelibs, the feeds-install extras and the .config seed.
-CORELIBS="openssl boost"
+#   golang   mihomo-alpha's PKG_BUILD_DEPENDS:=golang/host and its hard include
+#            $(TOPDIR)/feeds/packages/lang/golang/golang-package.mk; borrowed
+#            from the packages repo like boost (the packages feed itself stays
+#            unregistered — see cmd_register). cmd_install additionally
+#            exposes the borrowed tree at the canonical feeds/packages path
+#            the hard include expects.
+CORELIBS="openssl boost golang"
 corelib_repo() {
 	case "$1" in
 	openssl) echo "https://github.com/openwrt/openwrt.git" ;;
-	boost) echo "https://github.com/openwrt/packages.git" ;;
+	boost | golang) echo "https://github.com/openwrt/packages.git" ;;
 	esac
 }
 corelib_ref() {
 	# strategy-level in plan (may embed a ${VAR} template); concrete in corelibs
 	case "$1" in
 	openssl) echo 'openwrt-tag-v${OPENWRT_VERSION}' ;;
-	boost) echo "packages-feed-pinned" ;;
+	boost | golang) echo "packages-feed-pinned" ;;
 	esac
 }
 corelib_path() {
 	case "$1" in
 	openssl) echo "package/libs/openssl" ;;
 	boost) echo "libs/boost" ;;
+	golang) echo "lang/golang" ;;
 	esac
 }
 # where the lib lands INSIDE this feed (differs from the repo path for
@@ -72,26 +80,49 @@ corelib_dest() {
 	case "$1" in
 	openssl) echo "libs/openssl" ;;
 	boost) echo "libs/boost" ;;
+	golang) echo "lang/golang" ;;
 	esac
 }
 corelib_extra() {
 	case "$1" in
 	openssl) echo "" ;;
 	boost) echo "lang/python/python3-version.mk" ;;
+	golang) echo "" ;; # self-contained bundle: golang/ + *.mk siblings
 	esac
 }
 corelib_installname() {
 	case "$1" in
 	openssl) echo "libopenssl" ;;
 	boost) echo "boost" ;;
+	golang) echo "golang" ;;
 	esac
 }
 corelib_config() {
 	case "$1" in
 	openssl) printf 'CONFIG_PACKAGE_libopenssl=y\n# CONFIG_OPENSSL_ENGINE is not set\n' ;;
 	boost) echo "" ;;
+	golang) echo "" ;; # golang/host is dependency-triggered, never selected
 	esac
 }
+corelib_probe() {
+	# the file that proves the borrow landed (openssl/boost are single
+	# package dirs with a Makefile; golang is a bundle rooted at a .mk file)
+	case "$1" in
+	golang) echo "golang-package.mk" ;;
+	*) echo "Makefile" ;;
+	esac
+}
+
+# ---------------------------------------------------------------------------
+# The nikki bridge — the only second feed this repo trusts. The nikki stack
+# (mihomo-alpha built from the personal mihomo fork + nikki + luci-app-nikki
+# + zh-hans i18n split) lives in 2017fighting/OpenWrt-nikki, pinned by
+# commit; its Makefiles are never copied here. Upgrading the stack = bump
+# BRIDGE_REF to that repo's pushed HEAD (see its docs/adr/0001).
+BRIDGE_FEED=nikki
+BRIDGE_REPO=https://github.com/2017fighting/OpenWrt-nikki.git
+BRIDGE_REF=6ae04445e62a9bbfe4bd56e2123506804a619b0c
+BRIDGE_PKGS="mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-hans"
 
 # ---------------------------------------------------------------------------
 # Derivation from the feed's own Makefiles.
@@ -134,8 +165,8 @@ _packages() {
 
 # Compile order. The set is derived (plan warns about anything unlisted); the
 # order is curated — the proven sequence, each luci app after its service
-# package.
-COMPILE_ORDER="mosdns luci-app-mosdns natmapt stuntman luci-app-natmapt"
+# package, bridge stack last.
+COMPILE_ORDER="mosdns luci-app-mosdns natmapt stuntman luci-app-natmapt mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-hans"
 
 # _prefetch <makefile> <pkg> — emit url=/dest= for one tarball package; skip
 # git-sourced packages (the SDK clones those itself). Git variant = has
@@ -180,7 +211,7 @@ cmd_plan() {
 	echo "feed_name=$FEED_NAME"
 	echo "feed_root=$FEED_ROOT"
 	echo "src_link=src-link $FEED_NAME $FEED_ROOT"
-	echo "feeds_conf_policy=luci-only+this-feed"
+	echo "feeds_conf_policy=luci-only+this-feed+nikki-bridge"
 
 	_header corelibs
 	for lib in $CORELIBS; do
@@ -191,9 +222,16 @@ cmd_plan() {
 		echo "corelib.$lib.extra=$(corelib_extra "$lib")"
 	done
 
+	_header bridge
+	echo "bridge.feed=$BRIDGE_FEED"
+	echo "bridge.repo=$BRIDGE_REPO"
+	echo "bridge.ref=$BRIDGE_REF"
+	for pkg in $BRIDGE_PKGS; do echo "bridge.package=$pkg"; done
+
 	_header install
 	echo "install.extras=$(for lib in $CORELIBS; do corelib_installname "$lib"; done | tr '\n' ' ')"
 	for pkg in $(_packages); do echo "install.package=$pkg"; done
+	for pkg in $BRIDGE_PKGS; do echo "install.bridge=$pkg"; done
 
 	_header config
 	for lib in $CORELIBS; do corelib_config "$lib"; done
@@ -210,11 +248,15 @@ cmd_plan() {
 
 	_header compile
 	for pkg in $COMPILE_ORDER; do
-		echo "compile.target=package/feeds/$FEED_NAME/$pkg/compile"
+		case " $BRIDGE_PKGS " in
+		*" $pkg "*) echo "compile.target=package/feeds/$BRIDGE_FEED/$pkg/compile" ;;
+		*) echo "compile.target=package/feeds/$FEED_NAME/$pkg/compile" ;;
+		esac
 		case $pkg in
 		mosdns) echo "compile.env.mosdns=MOSDNS_GOARCH=$GOARCH" ;;
 		esac
 	done
+	echo "compile.bridge_relocate=$BRIDGE_FEED/*.apk -> \$FEED_NAME"
 	for pkg in $(_packages); do
 		case " $COMPILE_ORDER " in
 		*" $pkg "*) ;;
@@ -225,14 +267,14 @@ cmd_plan() {
 
 	_header verify
 	echo "verify.out=bin/packages/\${ARCH}/$FEED_NAME"
-	for g in mosdns luci-app-mosdns natmapt stuntman-client luci-app-natmapt; do
+	for g in mosdns luci-app-mosdns natmapt stuntman-client luci-app-natmapt mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-hans; do
 		echo "verify.apk=$g-*.apk"
 	done
 }
 
 cmd_register() {
 	local sdk="$1" conf="$1/feeds.conf"
-	step "register feed (luci only + this repo)"
+	step "register feed (luci only + this repo + $BRIDGE_FEED bridge)"
 	# The SDK ships feeds.conf.default (luci/packages/...) but no feeds.conf.
 	# Seed it with luci ONLY: the 'packages' feed is deliberately NOT
 	# registered — doing so would make curl/bash/coreutils-timeout buildable,
@@ -245,6 +287,10 @@ cmd_register() {
 	fi
 	grep -qxF "src-link $FEED_NAME $FEED_ROOT" "$conf" ||
 		printf 'src-link %s %s\n' "$FEED_NAME" "$FEED_ROOT" >>"$conf"
+	# The bridge: pinned src-git so every CI build is reproducible against
+	# exactly one OpenWrt-nikki commit (upgrade = bump BRIDGE_REF).
+	grep -q "^src-git $BRIDGE_FEED " "$conf" ||
+		printf 'src-git %s %s^%s\n' "$BRIDGE_FEED" "$BRIDGE_REPO" "$BRIDGE_REF" >>"$conf"
 	echo "--- feeds.conf ---"
 	cat "$conf"
 }
@@ -264,7 +310,7 @@ cmd_corelibs() {
 			git clone --depth 1 --branch "$ref" --filter=blob:none --sparse "$repo" "$tmp"
 			git -C "$tmp" sparse-checkout set "$path"
 			;;
-		boost)
+		boost | golang)
 			# The ref the SDK's own feeds.conf.default pins for the packages
 			# feed — build against exactly what this SDK expects.
 			ref=$(sed -nE 's@^src-git packages .*(\^|;)([^ ]+).*@\2@p' "$sdk/feeds.conf.default" | head -1)
@@ -278,7 +324,7 @@ cmd_corelibs() {
 			git -C "$tmp" checkout -q FETCH_HEAD
 			;;
 		esac
-		test -f "$tmp/$path/Makefile" || die "$lib: $path/Makefile not found at ref $ref"
+		test -f "$tmp/$path/$(corelib_probe "$lib")" || die "$lib: $path/$(corelib_probe "$lib") not found at ref $ref"
 		dest="$FEED_ROOT/$(corelib_dest "$lib")"
 		mkdir -p "$(dirname "$dest")"
 		rm -rf "$dest"
@@ -300,10 +346,18 @@ cmd_install() {
 	local sdk="$1" names="" lib pkg
 	for lib in $CORELIBS; do names="$names $(corelib_installname "$lib")"; done
 	for pkg in $(_packages); do names="$names $pkg"; done
+	for pkg in $BRIDGE_PKGS; do names="$names $pkg"; done
 	step "feeds update + install:$names"
 	(
 		cd "$sdk"
 		./scripts/feeds update -a
+		# mihomo-alpha's Makefile hard-includes
+		# $(TOPDIR)/feeds/packages/lang/golang/golang-package.mk — the canonical
+		# path into the packages feed we deliberately never register. The golang
+		# corelib is borrowed into THIS feed; expose it at the canonical path so
+		# the include resolves. Created after feeds update (which owns feeds/).
+		mkdir -p feeds/packages/lang
+		ln -sfn "$FEED_ROOT/lang/golang" feeds/packages/lang/golang
 		# names are whitespace-separated words by construction
 		# shellcheck disable=SC2086
 		./scripts/feeds install $names
@@ -341,7 +395,7 @@ cmd_prefetch() {
 }
 
 cmd_compile() {
-	local sdk="$1" pkg bin out
+	local sdk="$1" pkg bin out bridgedir
 	[ -n "$ARCH" ] || die "ARCH is required for compile/verify"
 	out="$sdk/bin/packages/$ARCH/$FEED_NAME"
 	for pkg in $COMPILE_ORDER; do
@@ -396,9 +450,50 @@ cmd_compile() {
 			(cd "$sdk" && make "package/feeds/$FEED_NAME/luci-app-natmapt/compile" -j"$(nproc)" V=s)
 			ls -l "$out"/luci-app-natmapt-*.apk
 			;;
+		mihomo-alpha)
+			# Bridge package: git-sourced from the personal mihomo fork (the SDK
+			# clones it itself — no dl/ pre-fetch). golang/host comes from the
+			# golang corelib; GOAMD64=v3 on x86_64 is set by the package Makefile,
+			# so the amd64 binary is v3 — check ELF + embedded version string,
+			# never exec (cross-arch on aarch64, and stays uniform here).
+			(cd "$sdk" && make "package/feeds/$BRIDGE_FEED/mihomo-alpha/compile" -j"$(nproc)" V=s)
+			# golang-package.mk drops cross-built binaries under the package's
+			# .go_work/build/bin/<goos_goarch>/ — a dot-dir, deep; search it
+			# explicitly (a shallow find \! -path '*/.*' would miss it).
+			bin=$(find "$sdk/build_dir"/target-*/mihomo-alpha-*/.go_work/build/bin \
+				-type f -name mihomo 2>/dev/null | head -1)
+			[ -n "$bin" ] || die "mihomo binary not found in build_dir"
+			file "$bin" | grep -q ELF || die "mihomo smoke: $bin is not an ELF binary"
+			strings "$bin" | grep -q "alpha-fork-" || die "mihomo smoke: fork version string missing from $bin"
+			file "$bin"
+			;;
+		nikki)
+			# Script/config package from the bridge feed.
+			(cd "$sdk" && make "package/feeds/$BRIDGE_FEED/nikki/compile" -j"$(nproc)" V=s)
+			ls -l "$sdk/bin/packages/$ARCH/$BRIDGE_FEED"/nikki-*.apk
+			;;
+		luci-app-nikki)
+			(cd "$sdk" && make "package/feeds/$BRIDGE_FEED/luci-app-nikki/compile" -j"$(nproc)" V=s)
+			ls -l "$sdk/bin/packages/$ARCH/$BRIDGE_FEED"/luci-app-nikki-*.apk
+			;;
+		luci-i18n-nikki-zh-hans)
+			# i18n split of luci-app-nikki (po/zh_Hans); PKGARCH:=all.
+			(cd "$sdk" && make "package/feeds/$BRIDGE_FEED/luci-i18n-nikki-zh-hans/compile" -j"$(nproc)" V=s)
+			ls -l "$sdk/bin/packages/$ARCH/$BRIDGE_FEED"/luci-i18n-nikki-zh-hans-*.apk
+			;;
 		*) die "no compile recipe for $pkg (extend cmd_compile)" ;;
 		esac
 	done
+	# The SDK bins packages into the owning feed's dir; the bridge stack thus
+	# lands in bin/packages/$ARCH/$BRIDGE_FEED. Everything downstream (index,
+	# sign, site slice) only looks at $FEED_NAME — relocate so ONE adb covers
+	# the whole feed, and drop the bridge dir so package/index cannot grow a
+	# second index the device never sees.
+	bridgedir="$sdk/bin/packages/$ARCH/$BRIDGE_FEED"
+	if [ -d "$bridgedir" ]; then
+		mv "$bridgedir"/*.apk "$out"/
+		rm -rf "$bridgedir"
+	fi
 }
 
 cmd_verify() {
@@ -406,7 +501,7 @@ cmd_verify() {
 	[ -n "$ARCH" ] || die "ARCH is required for compile/verify"
 	out="$sdk/bin/packages/$ARCH/$FEED_NAME"
 	step "verify apks in $out"
-	for g in mosdns luci-app-mosdns natmapt stuntman-client luci-app-natmapt; do
+	for g in mosdns luci-app-mosdns natmapt stuntman-client luci-app-natmapt mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-hans; do
 		# natmapt-* also covers its script splits; the rest are one apk each
 		# (or PKGARCH:=all, indexed under every arch slice).
 		ls -l "$out"/$g-*.apk || fails=$((fails + 1))
