@@ -350,17 +350,26 @@ cmd_install() {
 	step "feeds update + install:$names"
 	(
 		cd "$sdk"
-		./scripts/feeds update -a
 		# mihomo-alpha's Makefile hard-includes
 		# $(TOPDIR)/feeds/packages/lang/golang/golang-package.mk — the canonical
 		# path into the packages feed we deliberately never register. The golang
-		# corelib is borrowed into THIS feed; expose it at the canonical path so
-		# the include resolves. Created after feeds update (which owns feeds/).
+		# corelib is borrowed into THIS feed; expose it at the canonical path.
+		# MUST run before feeds update: update-time metadata dumps parse every
+		# feed Makefile, and a failed include silently drops the package from
+		# the index (feeds install then skips it without failing).
 		mkdir -p feeds/packages/lang
 		ln -sfn "$FEED_ROOT/lang/golang" feeds/packages/lang/golang
+		./scripts/feeds update -a
 		# names are whitespace-separated words by construction
 		# shellcheck disable=SC2086
 		./scripts/feeds install $names
+		# feeds install silently skips a name missing from every feed index —
+		# fail HERE, not five minutes later at compile with "no rule to make
+		# target package/feeds/<feed>/<pkg>/compile".
+		for pkg in $names; do
+			ls -d "$sdk"/package/feeds/*/$pkg >/dev/null 2>&1 ||
+				die "feeds install did not stage $pkg (metadata dump or name mismatch)"
+		done
 	)
 }
 
