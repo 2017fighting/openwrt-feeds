@@ -13,7 +13,7 @@ assert_eq "feed name default" \
 echo "$plan" | grep -q "^src_link=src-link openwrtfeeds $ROOT\$" &&
 	ok "src_link points at the repo root" || bad "src_link points at the repo root"
 assert_eq "feeds.conf policy" \
-	"$(echo "$plan" | sed -n 's/^feeds_conf_policy=//p')" "luci-only+this-feed+nikki-bridge"
+	"$(echo "$plan" | sed -n 's/^feeds_conf_policy=//p')" "luci+base+this-feed+nikki-bridge"
 
 # ---- [corelibs] — strategy-level refs only (Q11)
 c=$(bp_section corelibs)

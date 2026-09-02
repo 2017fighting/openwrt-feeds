@@ -211,7 +211,7 @@ cmd_plan() {
 	echo "feed_name=$FEED_NAME"
 	echo "feed_root=$FEED_ROOT"
 	echo "src_link=src-link $FEED_NAME $FEED_ROOT"
-	echo "feeds_conf_policy=luci-only+this-feed+nikki-bridge"
+	echo "feeds_conf_policy=luci+base+this-feed+nikki-bridge"
 
 	_header corelibs
 	for lib in $CORELIBS; do
@@ -274,15 +274,23 @@ cmd_plan() {
 
 cmd_register() {
 	local sdk="$1" conf="$1/feeds.conf"
-	step "register feed (luci only + this repo + $BRIDGE_FEED bridge)"
-	# The SDK ships feeds.conf.default (luci/packages/...) but no feeds.conf.
-	# Seed it with luci ONLY: the 'packages' feed is deliberately NOT
-	# registered — doing so would make curl/bash/coreutils-timeout buildable,
-	# forcing CI to build them (they need core libs the SDK lacks). Kept
-	# unregistered, they are runtime-only deps: the apk declares them and the
-	# device auto-installs them from its own repos.
+	step "register feed (luci + base + this repo + $BRIDGE_FEED bridge)"
+	# The SDK ships feeds.conf.default (base/packages/luci/...) but no
+	# feeds.conf. Seed it with luci AND base only:
+	#   luci  luci.mk apps (luci-app-nikki includes feeds/luci/luci.mk).
+	#   base  the openwrt main repo itself (--root=package): provides the
+	#         core packages (rpcd, ucode, libnl-tiny, lua, libubox, ...) that
+	#         the +luci-base closure of a luci.mk app force-builds — without
+	#         base, lucihttp/ucode-mod-html/rpcd-mod-luci die on missing
+	#         headers. Their apks land in bin/packages/<arch>/{luci,base}/,
+	#         outside this feed's published dir (same as the kmods).
+	# The 'packages' feed is deliberately NOT registered — doing so would
+	# make curl/bash/coreutils-timeout buildable, forcing CI to build them
+	# (they need core libs the SDK lacks). Kept unregistered, they are
+	# runtime-only deps: the apk declares them and the device auto-installs
+	# them from its own repos.
 	if [ ! -f "$conf" ]; then
-		awk '$2 == "luci" {print}' "$sdk/feeds.conf.default" >"$conf" 2>/dev/null || true
+		awk '$2 == "luci" || $2 == "base" {print}' "$sdk/feeds.conf.default" >"$conf" 2>/dev/null || true
 		[ -s "$conf" ] || cp "$sdk/feeds.conf.default" "$conf"
 	fi
 	grep -qxF "src-link $FEED_NAME $FEED_ROOT" "$conf" ||
