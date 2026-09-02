@@ -4,16 +4,19 @@ Self-built OpenWrt **source feed** (package Makefiles) + a GitHub Actions pipeli
 that compiles, signs, and publishes a **binary apk feed** to GitHub Pages.
 
 ## Build / test
+
 - There is **no local build**. Compilation runs in CI via the OpenWrt SDK
   (`.github/workflows/build.yml`). Push to `main` or `workflow_dispatch` triggers it.
 - OpenWrt **25.12.4 is APK-based** (`.apk` + `packages.adb`). Only the index is signed.
 - Host-side tests (no SDK needed): `sh tooling/tests/run.sh` — currently covers the natmapt section status store; CI runs it in a fast `Host tests` job before the matrix build.
 
 ## Local helpers
+
 - `sh tooling/gen-key.sh`            # one-time openssl EC apk signing keypair (privkey -> secret APK_SIGN_KEY)
 - `sh tooling/make-index.sh site`    # regenerate Pages index.html (optional `SITE_BASE=...`)
 
 ## Layout / conventions
+
 - `net/<pkg>/Makefile`     — apk package definitions (the source feed)
 - `feeds.config`           — JSON; drives the build matrix (`openwrt_version` x `arch`). Edit here to add an arch.
 - `keys/2017fighting.pem` — apk signing public key (EC PEM `-----BEGIN PUBLIC KEY-----`, committed); the private key is the `APK_SIGN_KEY` secret
@@ -23,6 +26,7 @@ that compiles, signs, and publishes a **binary apk feed** to GitHub Pages.
 - `feed.sh`              — on-device installer (adds apk key + feed, runs `apk update`); copied to the Pages site root by `build.yml`.
 
 ## Notes
+
 - `mosdns` is pure Go (CGO=0), cross-compiled with host Go, pinned to **v5.5.0**.
   Its Go source is **not** in this repo; the SDK fetches it by tag (CI pre-places it in `dl/`).
 - In CI: run `make defconfig` before package compile (no TTY); pre-fetch the source into `dl/`.

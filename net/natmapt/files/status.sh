@@ -37,7 +37,10 @@ command -v json_init >/dev/null 2>&1 || . /usr/share/libubox/jshn.sh
 _status_write() {
 	local f="$1" m="$2" t
 	t="$(mktemp "${f}.XXXXXX")" || return 1
-	{ cat > "$t" && chmod "$m" "$t" && mv -f "$t" "$f"; } || { rm -f "$t"; return 1; }
+	{ cat >"$t" && chmod "$m" "$t" && mv -f "$t" "$f"; } || {
+		rm -f "$t"
+		return 1
+	}
 }
 
 # _status_name <name> <sid> — sanitize the public filename (see the frozen

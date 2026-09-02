@@ -16,9 +16,12 @@ INITD='/etc/init.d/natmap'
 
 # fallloop <retry interval> <retry limit> <func> [args...]
 fallloop() {
-	local retry="$1"; shift
-	local limit="$1"; shift
-	local func="$1"; shift
+	local retry="$1"
+	shift
+	local limit="$1"
+	shift
+	local func="$1"
+	shift
 
 	local error=1 count=0 && until [ $error = 0 -o $count -ge $limit ]; do
 		$func "$@" && error=0 || error=$?
@@ -27,7 +30,7 @@ fallloop() {
 }
 
 # keep dest_port(forward port) consistent with public port
-if [ -n "$RWFW" -a "$($INITD info|jsonfilter -qe "@['$(basename $INITD)'].instances['$SECTIONID'].data.firewall[0].dest_port")" != "$port" ]; then
+if [ -n "$RWFW" -a "$($INITD info | jsonfilter -qe "@['$(basename $INITD)'].instances['$SECTIONID'].data.firewall[0].dest_port")" != "$port" ]; then
 	export PUBPORT="$port" #PROCD_DEBUG=1
 	$INITD start "$SECTIONID"
 fi
@@ -43,8 +46,8 @@ if [ -n "$REFRESH" ]; then
 fi
 if [ -n "$NOTIFY" ]; then
 	_text="$(jsonfilter -qs "$NOTIFY_PARAM" -e '@["text"]')"
-	[ -z "$_text" ] && _text="NATMap: ${COMMENT:+$COMMENT: }[${protocol^^}] $inner_ip:$inner_port -> $ip:$port" \
-	|| _text="$(echo "$_text" | sed " \
+	[ -z "$_text" ] && _text="NATMap: ${COMMENT:+$COMMENT: }[${protocol^^}] $inner_ip:$inner_port -> $ip:$port" ||
+		_text="$(echo "$_text" | sed " \
 		s|<comment>|$COMMENT|g; \
 		s|<protocol>|$protocol|g; \
 		s|<inner_ip>|$inner_ip|g; \
@@ -60,8 +63,8 @@ fi
 if [ -n "$DDNS" ]; then
 	_hostype="$(jsonfilter -qs "$DDNS_PARAM" -e '@["hostype"]')"
 	_svcparams="$(jsonfilter -qs "$DDNS_PARAM" -e '@["https_svcparams"]')"
-	_svcparams="$(echo "$_svcparams" | sed -E "s,\s*(port=\d*|$), port=${port},")" # port
-	[ "$_hostype" = A ]    && _svcparams="$(echo "$_svcparams" | sed -E "s|\b(ipv4hint=)\S*|\1${ip}|")" # ipv4hint
+	_svcparams="$(echo "$_svcparams" | sed -E "s,\s*(port=\d*|$), port=${port},")"                      # port
+	[ "$_hostype" = A ] && _svcparams="$(echo "$_svcparams" | sed -E "s|\b(ipv4hint=)\S*|\1${ip}|")"    # ipv4hint
 	[ "$_hostype" = AAAA ] && _svcparams="$(echo "$_svcparams" | sed -E "s|\b(ipv6hint=)\S*|\1${ip}|")" # ipv6hint
 	json_init
 	json_load "$DDNS_PARAM"

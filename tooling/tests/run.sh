@@ -26,7 +26,7 @@ export PATH
 # ------------------------------------------------- jshn adapter (sourced)
 # Minimal flat single-object JSON emitter: json_init/json_add_string/
 # json_add_int/json_dump, the calls status.sh makes.
-cat > "$SANDBOX/bin/jshn.sh" <<'EOF'
+cat >"$SANDBOX/bin/jshn.sh" <<'EOF'
 _J_ROWS=''
 json_init() { _J_ROWS=''; }
 _j_add() { _J_ROWS="${_J_ROWS:+${_J_ROWS},}\"$1\":$2"; }
@@ -40,7 +40,7 @@ EOF
 # ---------------------------------------------- jsonfilter adapter (PATH)
 # Supports only the form status.sh uses: -q -i <file> -e '@.<key>' for a
 # top-level string key. Prints the value or nothing.
-cat > "$SANDBOX/bin/jsonfilter" <<'EOF'
+cat >"$SANDBOX/bin/jsonfilter" <<'EOF'
 #!/bin/sh
 file='' expr=''
 while [ $# -gt 0 ]; do
@@ -63,8 +63,14 @@ chmod +x "$SANDBOX/bin/jsonfilter"
 
 # --------------------------------------------------------- assertions
 pass=0 fails=0
-ok()   { pass=$((pass + 1)); echo "ok - $1"; }
-bad()  { fails=$((fails + 1)); echo "NOT OK - $1"; }
+ok() {
+	pass=$((pass + 1))
+	echo "ok - $1"
+}
+bad() {
+	fails=$((fails + 1))
+	echo "NOT OK - $1"
+}
 assert_eq() { # <label> <got> <want>
 	[ "$2" = "$3" ] && ok "$1" || bad "$1 (got '$2', want '$3')"
 }
@@ -72,26 +78,26 @@ assert_mode() { # <label> <file> <mode>
 	m=$(stat -c %a "$2" 2>/dev/null)
 	assert_eq "$1" "$m" "$3"
 }
-field() { jsonfilter -q -i "$1" -e "@.$2"; }  # via the stub, like status.sh
+field() { jsonfilter -q -i "$1" -e "@.$2"; } # via the stub, like status.sh
 
 # ---- 1. publish writes both files with the frozen schema
 status_publish cfg123 "my comment" hath 4242 1.2.3.4 55551 ::ffff:1.2.3.4 51413 tcp 192.168.1.10
-assert_eq "private file is <pid>.json"    "$(ls "$PRIV" 2>/dev/null)" "4242.json"
-assert_eq "public file is <name>.json"    "$(ls "$PUB" 2>/dev/null)"  "hath.json"
+assert_eq "private file is <pid>.json" "$(ls "$PRIV" 2>/dev/null)" "4242.json"
+assert_eq "public file is <name>.json" "$(ls "$PUB" 2>/dev/null)" "hath.json"
 assert_mode "private perms 600" "$PRIV/4242.json" 600
-assert_mode "public perms 644"  "$PUB/hath.json"  644
-assert_eq "sid"        "$(field "$PUB/hath.json" sid)"        "cfg123"
-assert_eq "comment"    "$(field "$PUB/hath.json" comment)"    "my comment"
-assert_eq "ip"         "$(field "$PUB/hath.json" ip)"         "1.2.3.4"
-assert_eq "ip4p"       "$(field "$PUB/hath.json" ip4p)"       "::ffff:1.2.3.4"
-assert_eq "protocol"   "$(field "$PUB/hath.json" protocol)"   "tcp"
-assert_eq "inner_ip"   "$(field "$PUB/hath.json" inner_ip)"   "192.168.1.10"
-grep -q '"port":55551'       "$PUB/hath.json" && ok "port serialized as int"       || bad "port serialized as int"
+assert_mode "public perms 644" "$PUB/hath.json" 644
+assert_eq "sid" "$(field "$PUB/hath.json" sid)" "cfg123"
+assert_eq "comment" "$(field "$PUB/hath.json" comment)" "my comment"
+assert_eq "ip" "$(field "$PUB/hath.json" ip)" "1.2.3.4"
+assert_eq "ip4p" "$(field "$PUB/hath.json" ip4p)" "::ffff:1.2.3.4"
+assert_eq "protocol" "$(field "$PUB/hath.json" protocol)" "tcp"
+assert_eq "inner_ip" "$(field "$PUB/hath.json" inner_ip)" "192.168.1.10"
+grep -q '"port":55551' "$PUB/hath.json" && ok "port serialized as int" || bad "port serialized as int"
 grep -q '"inner_port":51413' "$PUB/hath.json" && ok "inner_port serialized as int" || bad "inner_port serialized as int"
 assert_eq "public adds name" "$(field "$PUB/hath.json" name)" "hath"
-assert_eq "public adds pid"  "$(field "$PUB/hath.json" pid)"  "4242"
+assert_eq "public adds pid" "$(field "$PUB/hath.json" pid)" "4242"
 grep -q '"name"' "$PRIV/4242.json" && bad "private has no name field" || ok "private has no name field"
-grep -q '"pid"'  "$PRIV/4242.json" && bad "private has no pid field"  || ok "private has no pid field"
+grep -q '"pid"' "$PRIV/4242.json" && bad "private has no pid field" || ok "private has no pid field"
 assert_eq "private sid matches" "$(field "$PRIV/4242.json" sid)" "cfg123"
 
 # ---- 2. name sanitizing + sid fallback
@@ -116,10 +122,10 @@ status_publish cfgB '' other 301 198.51.100.2 20003 '' 91 tcp 192.168.8.2
 assert_eq "respawn left two private files for cfgA" \
 	"$(ls "$PRIV" | grep -c '^20[12].json$')" "2"
 status_clear cfgA
-[ -e "$PRIV/201.json" ] || [ -e "$PRIV/202.json" ] || [ -e "$PUB/hath2.json" ] \
-	&& bad "every cfgA file removed" || ok "every cfgA file removed"
-[ -f "$PRIV/301.json" ] && [ -f "$PUB/other.json" ] \
-	&& ok "cfgB untouched in both dirs" || bad "cfgB untouched in both dirs"
+[ -e "$PRIV/201.json" ] || [ -e "$PRIV/202.json" ] || [ -e "$PUB/hath2.json" ] &&
+	bad "every cfgA file removed" || ok "every cfgA file removed"
+[ -f "$PRIV/301.json" ] && [ -f "$PUB/other.json" ] &&
+	ok "cfgB untouched in both dirs" || bad "cfgB untouched in both dirs"
 assert_eq "cfgB private file survives" "$(field "$PRIV/301.json" sid)" "cfgB"
 
 # ---- 5. clear-all empties both dirs (any file type, like the old find)
