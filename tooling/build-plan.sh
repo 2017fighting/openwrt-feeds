@@ -476,10 +476,12 @@ cmd_compile() {
 			# so the amd64 binary is v3 — check ELF + embedded version string,
 			# never exec (cross-arch on aarch64, and stays uniform here).
 			(cd "$sdk" && make "package/feeds/$BRIDGE_FEED/mihomo-alpha/compile" -j"$(nproc)" V=s)
-			# golang-package.mk drops cross-built binaries under the package's
-			# .go_work/build/bin/<goos_goarch>/ — a dot-dir, deep; search it
-			# explicitly (a shallow find \! -path '*/.*' would miss it).
-			bin=$(find "$sdk/build_dir"/target-*/mihomo-alpha-*/.go_work/build/bin \
+			# After a successful build OpenWrt AUTOREMOVES the package build dir
+			# (only .pkgdir — the installed file tree — and stamp files survive),
+			# so search the whole package dir: the binary sits at
+			# .pkgdir/mihomo-alpha/usr/libexec/mihomo (and in .go_work/build/bin
+			# if autoremove policy ever changes).
+			bin=$(find "$sdk/build_dir"/target-*/mihomo-alpha-*/ \
 				-type f -name mihomo 2>/dev/null | head -1)
 			[ -n "$bin" ] || die "mihomo binary not found in build_dir"
 			file "$bin" | grep -q ELF || die "mihomo smoke: $bin is not an ELF binary"
