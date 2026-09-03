@@ -28,10 +28,8 @@ that compiles, signs, and publishes a **binary apk feed** to GitHub Pages.
 
 ## Notes
 
-- `mosdns` is pure Go (CGO=0), cross-compiled with host Go, pinned to **v5.5.0**.
-  Its Go source is **not** in this repo; the SDK fetches it by tag (CI pre-places it in `dl/`).
 - In CI: run `make defconfig` before package compile (no TTY); pre-fetch the source into `dl/`.
-- `PKGARCH` auto-detects the SDK target arch; `MOSDNS_GOARCH` is passed from the matrix.
+- `PKGARCH` auto-detects the SDK target arch.
 - `natmapt` is a **C binary** (upstream <https://github.com/heiher/natmap>), compiled with the SDK's musl/gcc toolchain. Its release tarball (`natmap-<ver>.tar.xz`) is pre-fetched into `dl/`. `DEPENDS:=+curl +jsonfilter +bash` are **runtime-only** (see SDK limitation) — the device auto-installs them from its own repos on `apk add natmapt`. The single `net/natmapt` Makefile also defines 5 `PKGARCH:=all` script sub-packages; `natmapt/compile` builds them all (splits share the source dir — no per-split compile targets).
 - `natmapt` status interface: the **section status store** (`net/natmapt/files/status.sh` → `/usr/lib/natmap/status.sh`) owns everything — schema, paths, filename sanitizing, atomic writes, cleanup. `natmap-update.sh` (the natmap `-e` hook; the init exports `SECTIONID`/`COMMENT`/`STATUS_NAME` into it) calls `status_publish <sid> <comment> <name> <pid> + 6 mapping fields`; `/etc/init.d/natmap` calls `status_clear [sid]` (removes **every** file of that section). Consumer-facing contract (frozen — do not change in place): public per-name file `/www/natmap/<name|SECTIONID>.json`, served by uhttpd over HTTP at `/natmap/<name>.json` as a query interface for other programs. The normative schema/URL/perm statement is the `status.sh` header; host-side tests in `tooling/tests/`.
 - `stuntman-client` (`net/stuntman/`, vendored from <https://github.com/muink/openwrt-stuntman>) provides `stunclient` for `luci-app-natmapt`'s NAT-type test. C++ target binary; `PKG_BUILD_DEPENDS:=boost/host` (heavier host-boost build); `+libopenssl` (both pulled into THIS feed at CI time — see below). `luci-app-natmapt` depends on `+natmapt +coreutils-timeout +stuntman-client` (coreutils-timeout is runtime-only). Git source — SDK clones `muink/stunserver.git` directly. `stuntman/compile` builds the client/server/testcode splits.

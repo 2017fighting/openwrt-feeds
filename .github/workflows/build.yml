@@ -29,7 +29,6 @@ permissions:
 
 env:
   FEED_NAME: openwrtfeeds
-  GO_VERSION: "1.26"
 
 jobs:
   # Fast host-side gate: exercises the shell modules (section status store)
@@ -68,19 +67,6 @@ jobs:
     steps:
       - name: Checkout feed
         uses: actions/checkout@v4
-
-      - name: Set up Go (host toolchain; cross-compiles mosdns)
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: false # no go.sum at repo root; Go modules resolve inside the SDK build
-
-      - name: Expose Go to the SDK build environment
-        run: |
-          echo "$(go env GOROOT)/bin" >> "$GITHUB_PATH"
-          echo "GOROOT=$(go env GOROOT)" >> "$GITHUB_ENV"
-          echo "GOPATH=$(go env GOPATH)" >> "$GITHUB_ENV"
-          go version
 
       - name: Compute SDK URL
         id: sdk
@@ -140,7 +126,6 @@ jobs:
       - name: Prepare feed (register + corelibs + install + config + prefetch)
         env:
           OPENWRT_VERSION: ${{ matrix.openwrt_version }}
-          GOARCH: ${{ matrix.goarch }}
         run: |
           SDK="$RUNNER_TEMP/sdk"
           sh tooling/build-plan.sh register "$SDK"
@@ -152,7 +137,6 @@ jobs:
       - name: Build all packages (compile + smoke tests + verify)
         env:
           ARCH: ${{ matrix.arch }}
-          GOARCH: ${{ matrix.goarch }}
         run: |
           SDK="$RUNNER_TEMP/sdk"
           sh tooling/build-plan.sh compile "$SDK"

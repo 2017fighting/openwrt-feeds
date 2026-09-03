@@ -7,7 +7,7 @@ Pages.
 - **OpenWrt version:** 25.12.4 (APK package manager)
 - **Architectures:** `x86_64`, `aarch64_generic`
 - **Live binary feed:** <https://2017fighting.github.io/openwrt-feeds/25.12.4/>
-- **Packages:** `mosdns` + `luci-app-mosdns` (plugin-based DNS forwarder + LuCI app; <https://github.com/IrineSistiana/mosdns>), `natmapt` + `luci-app-natmapt` (TCP/UDP port mapping for full-cone NAT + LuCI app; <https://github.com/heiher/natmap>), `stuntman-client` (STUN client used by natmapt's NAT-type test; <https://github.com/jselbie/stunserver>), and the **nikki stack** — `mihomo-alpha` (built from the personal mihomo fork: preferred-ip + heybox, pinned commit, x86-v3 on x86_64) + `nikki` + `luci-app-nikki` — bridged from <https://github.com/2017fighting/OpenWrt-nikki> via a pinned src-git feed
+- **Packages:** `natmapt` + `luci-app-natmapt` (TCP/UDP port mapping for full-cone NAT + LuCI app; <https://github.com/heiher/natmap>), `stuntman-client` (STUN client used by natmapt's NAT-type test; <https://github.com/jselbie/stunserver>), and the **nikki stack** — `mihomo-alpha` (built from the personal mihomo fork: preferred-ip + heybox, pinned commit, x86-v3 on x86_64) + `nikki` + `luci-app-nikki` — bridged from <https://github.com/2017fighting/OpenWrt-nikki> via a pinned src-git feed
 - **Quick install:** `sh -c "$(wget -O- https://2017fighting.github.io/openwrt-feeds/feed.sh)"`
 
 This repository is **both** the source feed (OpenWrt package `Makefile`s on
@@ -25,10 +25,6 @@ sh -c "$(wget -O- https://2017fighting.github.io/openwrt-feeds/feed.sh)"
 Then install packages and enable the service:
 
 ```sh
-# mosdns (plugin-based DNS forwarder)
-apk add mosdns luci-app-mosdns
-/etc/init.d/mosdns enable && /etc/init.d/mosdns start
-
 # natmapt (TCP/UDP port mapping for full-cone NAT) + LuCI app
 apk add natmapt luci-app-natmapt
 /etc/init.d/natmap enable && /etc/init.d/natmap start
@@ -61,23 +57,17 @@ echo 'https://2017fighting.github.io/openwrt-feeds/25.12.4/x86_64/packages.adb' 
 
 # 3. Install
 apk update
-apk add mosdns
+apk add natmapt luci-app-natmapt
 
 # 4. Enable + start the service (procd)
-/etc/init.d/mosdns enable
-/etc/init.d/mosdns start
+/etc/init.d/natmap enable
+/etc/init.d/natmap start
 ```
 
 Always point the feed at the **signed index file** (`packages.adb`), not the
 directory — the bare directory makes apk probe the legacy `<arch>/APKINDEX.tar.gz`
 and warn (`unexpected end of file`). The same `packages.adb` URL is what a custom
 firmware image (ASU / imagebuilder) consumes as an additional feed.
-
-> The default config (`/etc/mosdns/config.yaml`) runs the cfst_pool/lpush
-> Cloudflare-speedtest pipeline: it listens on `:1053` (UDP+TCP), forwards via
-> mihomo (`127.0.0.1:2053`) with a `223.5.5.5` fallback, and rewrites Cloudflare
-> response IPs with the fastest probed IPs. Edit it (or use the LuCI app) and
-> `/etc/init.d/mosdns restart`.
 
 ## Signing
 
@@ -111,10 +101,8 @@ dispatch):
 ## Repository layout
 
 ```
-net/mosdns/            # the mosdns package (Makefile + default config + init script)
 net/natmapt/           # natmapt — TCP/UDP port mapping for full-cone NAT (binary + scripts + init)
 net/stuntman/          # stuntman-client — STUN client (stunclient) for natmapt's NAT-type test
-luci/luci-app-mosdns/  # the mosdns LuCI app (Makefile + htdocs/root)
 luci/luci-app-natmapt/ # the natmapt LuCI app (htdocs + rpcd + translations)
 keys/                 # apk EC public signing key (committed; private key is a CI secret)
 tooling/              # keygen + Pages index helpers (gen-key.sh, make-index.sh)
@@ -137,13 +125,11 @@ CI time).
 ## Adding a version or architecture
 
 Add an entry to [`feeds.config`](feeds.config) (and, for now, the inlined matrix
-in `build.yml`). The SDK URL and Go `GOARCH` are derived from the entry.
+in `build.yml`). The SDK tarball URL is derived from the entry.
 
 ## License
 
-Package sources retain their upstream licenses. `mosdns` is **GPL-3.0**
-(<https://github.com/IrineSistiana/mosdns>); its `LICENSE` is shipped inside the
-package at `/usr/share/mosdns/LICENSE`. `natmapt` is **MIT** and
+Package sources retain their upstream licenses. `natmapt` is **MIT** and
 `luci-app-natmapt` is **Apache-2.0** (<https://github.com/heiher/natmap>,
 <https://github.com/muink/luci-app-natmapt>). `stuntman` is **Apache-2.0**
 (<https://github.com/jselbie/stunserver>). This feed also ships `libopenssl`

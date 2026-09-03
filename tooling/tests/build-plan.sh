@@ -54,7 +54,7 @@ assert_eq "corelib install extras" \
 	"$(echo "$i" | sed -n 's/^install.extras=//p')" "libopenssl boost golang "
 got=$(echo "$i" | sed -n 's/^install.package=//p' | sort | tr '\n' ' ')
 assert_eq "install set == every Makefile dir under net/ and luci/" "$got" \
-	"luci-app-mosdns luci-app-natmapt mosdns natmapt stuntman "
+	"luci-app-natmapt natmapt stuntman "
 got=$(echo "$i" | sed -n 's/^install.bridge=//p' | tr '\n' ' ')
 assert_eq "bridge packages join the install set (i18n split ships with its app source)" "$got" \
 	"mihomo-alpha nikki luci-app-nikki "
@@ -68,13 +68,6 @@ echo "$cfg" | grep -qx '# CONFIG_OPENSSL_ENGINE is not set' &&
 
 # ---- [prefetch] — derived from the Makefiles themselves
 p=$(bp_section prefetch)
-mosdns_ver=$(sed -n 's/^PKG_VERSION:=//p' "$ROOT/net/mosdns/Makefile" | head -1)
-assert_eq "mosdns url == PKG_SOURCE_URL with PKG_VERSION expanded" \
-	"$(echo "$p" | sed -n 's/^prefetch.mosdns.url=//p')" \
-	"https://github.com/2017fighting/mosdns/archive/refs/tags/v$mosdns_ver.tar.gz"
-assert_eq "mosdns dest == PKG_SOURCE with PKG_VERSION expanded" \
-	"$(echo "$p" | sed -n 's/^prefetch.mosdns.dest=//p')" \
-	"dl/mosdns-$mosdns_ver.tar.gz"
 natmap_ver=$(sed -n 's/^PKG_UPSTREAM_VERSION:=//p' "$ROOT/net/natmapt/Makefile" | head -1)
 assert_eq "natmap url derived (two-level Make var expansion)" \
 	"$(echo "$p" | sed -n 's/^prefetch.natmapt.url=//p')" \
@@ -90,7 +83,7 @@ echo "$p" | grep -q '^prefetch.stuntman\.' &&
 c=$(bp_section compile)
 got=$(echo "$c" | sed -n 's/^compile.target=package\/feeds\/[a-z]*\///p' | sed 's/\/compile$//' | tr '\n' ' ')
 assert_eq "compile order" "$got" \
-	"mosdns luci-app-mosdns natmapt stuntman luci-app-natmapt mihomo-alpha nikki luci-app-nikki "
+	"natmapt stuntman luci-app-natmapt mihomo-alpha nikki luci-app-nikki "
 echo "$c" | grep -qx 'compile.target=package/feeds/nikki/mihomo-alpha/compile' &&
 	ok "bridge packages compile under the nikki feed target" ||
 	bad "bridge packages compile under the nikki feed target"
@@ -100,26 +93,18 @@ echo "$c" | grep -q '^compile.bridge_relocate=nikki/' &&
 echo "$c" | grep -q '^compile.unlisted=' &&
 	bad "every derived package has a compile slot" ||
 	ok "every derived package has a compile slot"
-echo "$c" | grep -q '^compile.unlisted=' &&
-	bad "every derived package has a compile slot" ||
-	ok "every derived package has a compile slot"
-
-# ---- env passthrough: GOARCH reaches the mosdns compile invocation
-plan_arm=$(GOARCH=arm64 sh "$BP" plan 2>&1)
-assert_eq "GOARCH env flows into the plan" \
-	"$(echo "$plan_arm" | sed -n 's/^compile.env.mosdns=//p')" "MOSDNS_GOARCH=arm64"
 
 # ---- [verify] — apk globs, natmapt-* covering its splits
 v=$(bp_section verify)
 gfail=0
-for g in mosdns luci-app-mosdns natmapt stuntman-client luci-app-natmapt \
+for g in natmapt stuntman-client luci-app-natmapt \
 	mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-cn; do
 	echo "$v" | grep -Fxq "verify.apk=$g-*.apk" || {
 		bad "verify glob present: $g"
 		gfail=1
 	}
 done
-[ "$gfail" -eq 0 ] && ok "all nine verify globs present"
+[ "$gfail" -eq 0 ] && ok "all seven verify globs present"
 
 # ---- CLI guards
 if sh "$BP" bogus >/dev/null 2>&1; then

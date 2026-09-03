@@ -3,7 +3,7 @@
 # and how. Everything derivable is derived from the package Makefiles in this
 # feed (source names, tarball URLs, git-proto skips); the irreducible SDK
 # workarounds live in the corelib table below. The workflow only supplies the
-# matrix (env: FEED_NAME, OPENWRT_VERSION, ARCH, GOARCH) and the two
+# matrix (env: FEED_NAME, OPENWRT_VERSION, ARCH) and the two
 # secret-touching steps (key install, apk adbsign) — those never come in here.
 #
 # Subcommands:
@@ -29,7 +29,6 @@ FEED_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 FEED_NAME=${FEED_NAME:-openwrtfeeds}
 OPENWRT_VERSION=${OPENWRT_VERSION:-}
 ARCH=${ARCH:-}
-GOARCH=${GOARCH:-amd64}
 
 # ---------------------------------------------------------------------------
 # The corelib table — the only static package knowledge in the module.
@@ -166,7 +165,7 @@ _packages() {
 # Compile order. The set is derived (plan warns about anything unlisted); the
 # order is curated — the proven sequence, each luci app after its service
 # package, bridge stack last.
-COMPILE_ORDER="mosdns luci-app-mosdns natmapt stuntman luci-app-natmapt mihomo-alpha nikki luci-app-nikki"
+COMPILE_ORDER="natmapt stuntman luci-app-natmapt mihomo-alpha nikki luci-app-nikki"
 
 # _prefetch <makefile> <pkg> — emit url=/dest= for one tarball package; skip
 # git-sourced packages (the SDK clones those itself). Git variant = has
@@ -257,9 +256,6 @@ cmd_plan() {
 		*" $pkg "*) echo "compile.target=package/feeds/$BRIDGE_FEED/$pkg/compile" ;;
 		*) echo "compile.target=package/feeds/$FEED_NAME/$pkg/compile" ;;
 		esac
-		case $pkg in
-		mosdns) echo "compile.env.mosdns=MOSDNS_GOARCH=$GOARCH" ;;
-		esac
 	done
 	echo "compile.bridge_relocate=$BRIDGE_FEED/*.apk -> \$FEED_NAME"
 	for pkg in $(_packages); do
@@ -272,7 +268,7 @@ cmd_plan() {
 
 	_header verify
 	echo "verify.out=bin/packages/\${ARCH}/$FEED_NAME"
-	for g in mosdns luci-app-mosdns natmapt stuntman-client luci-app-natmapt mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-cn; do
+	for g in natmapt stuntman-client luci-app-natmapt mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-cn; do
 		echo "verify.apk=$g-*.apk"
 	done
 }
@@ -443,35 +439,13 @@ cmd_compile() {
 	for pkg in $COMPILE_ORDER; do
 		step "build $pkg"
 		case $pkg in
-		mosdns)
-			(cd "$sdk" && make "package/feeds/$FEED_NAME/mosdns/compile" MOSDNS_GOARCH="$GOARCH" -j"$(nproc)" V=s)
-			# Smoke the .pkgdir copy — the packaged binary that actually ships.
-			# The SDK's AUTOREMOVE deletes the pristine go-build output after
-			# packaging (.autoremove marker), so only the dot-dir .pkgdir copy
-			# survives; an unbounded find once raced onto .pkgdir's
-			# etc/init.d/mosdns (a SHELL script) and "executed" that instead.
-			bin=$(find "$sdk/build_dir" -type f -path '*/mosdns-*/.pkgdir/mosdns/usr/bin/mosdns' | head -1)
-			[ -n "$bin" ] || die "mosdns binary not found in build_dir (expected the .pkgdir copy)"
-			file "$bin" | grep -q ELF || die "mosdns smoke: $bin is not an ELF binary"
-			if [ "$GOARCH" = amd64 ]; then
-				"$bin" version # runner is amd64 -> execute directly
-			else
-				file "$bin" # cross-arch binary; cannot exec on amd64 runner
-			fi
-			;;
-		luci-app-mosdns)
-			(cd "$sdk" && make "package/feeds/$FEED_NAME/luci-app-mosdns/compile" -j"$(nproc)" V=s)
-			# The apk SDK packages the PKGARCH:=all luci-app directly into
-			# each arch feed dir; assert presence before indexing.
-			ls -l "$out"/luci-app-mosdns-*.apk
-			;;
 		natmapt)
 			# One Makefile = natmapt + 5 PKGARCH:=all script splits; building
 			# the SOURCE package compiles and packages all of them (splits
 			# share the source dir, no separate compile targets).
 			(cd "$sdk" && make "package/feeds/$FEED_NAME/natmapt/compile" -j"$(nproc)" V=s)
 			# Smoke the .pkgdir copy (the SDK's AUTOREMOVE deletes the pristine
-			# build output after packaging — see the mosdns branch).
+			# build output after packaging — see the mihomo-alpha branch).
 			bin=$(find "$sdk/build_dir" -type f -path '*/natmap-*/.pkgdir/natmapt/usr/bin/natmap' | head -1)
 			[ -n "$bin" ] || die "natmap binary not found in build_dir (expected the .pkgdir copy)"
 			# Target-arch C binary: do NOT exec it (it binds ports and would
@@ -544,7 +518,7 @@ cmd_verify() {
 	[ -n "$ARCH" ] || die "ARCH is required for compile/verify"
 	out="$sdk/bin/packages/$ARCH/$FEED_NAME"
 	step "verify apks in $out"
-	for g in mosdns luci-app-mosdns natmapt stuntman-client luci-app-natmapt mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-cn; do
+	for g in natmapt stuntman-client luci-app-natmapt mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-cn; do
 		# natmapt-* also covers its script splits; the rest are one apk each
 		# (or PKGARCH:=all, indexed under every arch slice).
 		ls -l "$out"/$g-*.apk || fails=$((fails + 1))

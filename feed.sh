@@ -78,4 +78,4 @@ echo "update feeds"
 apk update
 
 echo "success"
-echo "now install:  apk add mosdns luci-app-mosdns"
+echo "now install:  apk add natmapt luci-app-natmapt"

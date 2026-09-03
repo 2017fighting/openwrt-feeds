@@ -1,8 +1,0 @@
-# /etc/config/mosdns — generic defaults for the mosdns package.
-# luci-app-mosdns's uci-defaults script enables the service on first install;
-# configfile already defaults to /etc/mosdns/config.yaml (the single config).
-
-config mosdns 'config'
-	option enabled '0'
-	option configfile '/etc/mosdns/config.yaml'
-	option redirect '0'
