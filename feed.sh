@@ -27,23 +27,23 @@ arch="$DISTRIB_ARCH"
 # openwrt_version (the site is laid out as <version>/<arch>/). Add a new
 # case when a new OpenWrt version is published.
 case "$DISTRIB_RELEASE" in
-	*"25.12"*)
-		version="25.12.4"
-		;;
-	*)
-		echo "unsupported release: $DISTRIB_RELEASE (only OpenWrt 25.12.x is published)"
-		exit 1
-		;;
+*"25.12"*)
+	version="25.12.4"
+	;;
+*)
+	echo "unsupported release: $DISTRIB_RELEASE (only OpenWrt 25.12.x is published)"
+	exit 1
+	;;
 esac
 
 # Only the arches in feeds.config are built; fail early with a clear message
 # instead of a cryptic apk "no index" error on update.
 case "$arch" in
-	x86_64|aarch64_generic) ;;
-	*)
-		echo "unsupported arch: $arch (published: x86_64, aarch64_generic)"
-		exit 1
-		;;
+x86_64 | aarch64_generic) ;;
+*)
+	echo "unsupported arch: $arch (published: x86_64, aarch64_generic)"
+	exit 1
+	;;
 esac
 
 repository_url="https://2017fighting.github.io/openwrt-feeds"
@@ -71,7 +71,7 @@ for f in /etc/apk/repositories "$list"; do
 	[ -f "$f" ] || continue
 	grep -q "$marker" "$f" && sed -i "\#$marker#d" "$f"
 done
-echo "$feed_url/packages.adb" >> "$list"
+echo "$feed_url/packages.adb" >>"$list"
 
 # --- 5. Update ---------------------------------------------------------------
 echo "update feeds"
