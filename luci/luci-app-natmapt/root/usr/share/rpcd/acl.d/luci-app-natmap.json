@@ -5,20 +5,15 @@
 			"file": {
 				"/etc/natmap/client": [ "list" ],
 				"/etc/natmap/notify": [ "list" ],
-				"/etc/natmap/ddns": [ "list" ],
-				"/etc/init.d/natmap reload *": [ "exec" ],
-				"/var/run/natmap/*": [ "read" ],
-				"/tmp/natmap-natBehavior": [ "read" ],
-				"/usr/libexec/natmap/natcheck.sh": [ "exec" ]
+				"/etc/natmap/ddns": [ "list" ]
 			},
 			"ubus": {
-				"service": [ "list" ],
-				"luci.natmap": [ "*" ]
+				"luci.natmap": [ "get_congestions", "get_status", "nattest", "reload" ]
 			},
-			"uci": ["natmap"]
+			"uci": [ "natmap" ]
 		},
 		"write": {
-			"uci": ["natmap"]
+			"uci": [ "natmap" ]
 		}
 	}
 }

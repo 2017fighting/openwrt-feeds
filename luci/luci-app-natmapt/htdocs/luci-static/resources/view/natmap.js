@@ -11,19 +11,14 @@
 const conf = 'natmap';
 const natmap_instance = 'natmap';
 const nattest_fw_rulename = 'natmap-natest';
-const nattest_result_path = '/tmp/natmap-natBehavior';
 const etc_path = '/etc/natmap';
 
-const callServiceList = rpc.declare({
-	object: 'service',
-	method: 'list',
-	params: ['name'],
-	expect: { '': {} }
-});
-
-const callHostHints = rpc.declare({
-	object: 'luci-rpc',
-	method: 'getHostHints',
+// All backend access crosses one seam (the luci.natmap rpcd object — see
+// root/usr/share/rpcd/ucode/luci.natmap). No raw status-file reads, no
+// init.d execs, no rawhtml from shell scripts.
+const callGetStatus = rpc.declare({
+	object: 'luci.natmap',
+	method: 'get_status',
 	expect: { '': {} }
 });
 
@@ -33,34 +28,27 @@ const callGetCongestions = rpc.declare({
 	expect: { '': {} }
 });
 
-function getInstances() {
-	return L.resolveDefault(callServiceList(conf), {}).then((res) => {
-		try {
-			return res[conf].instances || {};
-		} catch (e) {}
-		return {};
-	});
-}
+const callNattest = rpc.declare({
+	object: 'luci.natmap',
+	method: 'nattest',
+	params: [ 'udp_stun', 'tcp_stun', 'port' ],
+	expect: { '': {} }
+});
 
-function getStatus() {
-	return getInstances().then((instances) => {
-		let promises = [];
-		let status = {};
-		for (let key in instances) {
-			let i = instances[key];
-			if (i.running && i.pid) {
-				let f = '/var/run/natmap/' + i.pid + '.json';
-				((k) => {
-					promises.push(fs.read(f).then((res) => {
-						status[k] = JSON.parse(res);
-					}).catch((e) =>{}));
-				})(key);
-			}
-		}
-		return Promise.all(promises).then(() => { return status; });
-	});
-}
+const callReload = rpc.declare({
+	object: 'luci.natmap',
+	method: 'reload',
+	params: [ 'section' ],
+	expect: { '': {} }
+});
 
+const callHostHints = rpc.declare({
+	object: 'luci-rpc',
+	method: 'getHostHints',
+	expect: { '': {} }
+});
+
+// transformHostHints <family> <hosts> <html>
 function transformHostHints(family, hosts, html) {
 	let choice_values = [];
 	let choice_labels = {};
@@ -103,10 +91,8 @@ function transformHostHints(family, hosts, html) {
 return view.extend({
 	load() {
 	return Promise.all([
-		getStatus(),
+		callGetStatus(),
 		network.getWANNetworks(),
-		L.resolveDefault(fs.stat('/usr/bin/stunclient'), null),
-		L.resolveDefault(fs.read(nattest_result_path), null),
 		callHostHints(),
 		L.resolveDefault(fs.list(etc_path + '/client'), []),
 		L.resolveDefault(fs.list(etc_path + '/notify'), []),
@@ -120,13 +106,11 @@ return view.extend({
 	render(res) {
 		const status = res[0];
 		const wans = res[1];
-		const has_stunclient = res[2] ? res[2].path : null;
-		const nattest_result = res[3] ? res[3].trim() : '';
-		const hosts = res[4];
-		const scripts_client = res[5] ? res[5] : [];
-		const scripts_notify = res[6] ? res[6] : [];
-		const scripts_ddns = res[7] ? res[7] : [];
-		const congestions = res[8];
+		const hosts = res[2];
+		const scripts_client = res[3] ? res[3] : [];
+		const scripts_notify = res[4] ? res[4] : [];
+		const scripts_ddns = res[5] ? res[5] : [];
+		const congestions = res[6];
 
 		let m, s, o;
 
@@ -139,8 +123,8 @@ return view.extend({
 		o.inputtitle = _('Reload');
 		o.inputstyle = 'apply';
 		o.onclick = function() {
-			return fs.exec('/etc/init.d/natmap', ['reload', ''])
-				.then((res) => { return window.location = window.location.href.split('#')[0] })
+			return callReload('')
+				.then(() => { window.location.href = window.location.href.split('#')[0] })
 				.catch((e) => { ui.addNotification(null, E('p', e.message), 'error') });
 		};
 
@@ -263,30 +247,27 @@ return view.extend({
 			}
 		};
 
-		o = s.option(form.Button, '_nattest', _('Check NAT Behavior'));
+		o = s.option(form.Button, '_nattest', _('Check NAT Behavior'),
+			_('Runs stunclient; requires <b>stuntman-client</b> (missing-dependency errors surface on click)'));
 		o.inputtitle = _('Check');
 		o.inputstyle = 'apply';
-		if (! has_stunclient) {
-			o.description = _('To check NAT Behavior you need to install <a href="%s"><b>stuntman-client</b></a> first')
-				.format('https://github.com/muink/openwrt-stuntman');
-			o.readonly = true;
-		}
 		o.onclick = function() {
 			let test_port = uci.get_first(conf, 'global', 'test_port');
 			let udp_stun_host = uci.get_first(conf, 'global', 'def_udp_stun');
 			let tcp_stun_host = uci.get_first(conf, 'global', 'def_tcp_stun');
 
-			return fs.exec('/usr/libexec/natmap/natcheck.sh', [udp_stun_host + ':3478', tcp_stun_host + ':3478', test_port, nattest_result_path])
-				.then((res) => { return window.location = window.location.href.split('#')[0] })
+			return callNattest(udp_stun_host + ':3478', tcp_stun_host + ':3478', test_port)
+				.then((res) => {
+					if (res.error)
+						return ui.addNotification(null, E('p', res.error), 'error');
+					ui.addNotification(null, E('div', { 'style': 'max-width:60em' }, [
+						E('strong', {}, 'UDP TEST:'),
+						E('pre', { 'style': 'white-space:pre-wrap;margin:0 0 1em' }, [ res.udp ]),
+						E('strong', {}, 'TCP TEST:'),
+						E('pre', { 'style': 'white-space:pre-wrap;margin:0' }, [ res.tcp ])
+					]), 'info');
+				})
 				.catch((e) => { ui.addNotification(null, E('p', e.message), 'error') });
-		};
-
-		if (nattest_result.length) {
-			o = s.option(form.DummyValue, '_nattest_result', '　');
-			o.rawhtml = true;
-			o.cfgvalue = function(s) {
-				return '<details><summary>' + _('Expand/Collapse result') + '</summary>' + nattest_result + '</details>';
-			}
 		};
 
 		s = m.section(form.GridSection, 'natmap');
@@ -763,7 +744,7 @@ return view.extend({
 		o.inputtitle = _('⭮');
 		o.inputstyle = 'apply';
 		o.onclick = function(ev, section_id) {
-			return fs.exec('/etc/init.d/natmap', ['reload', section_id])
+			return callReload(section_id)
 				.catch((e) => { ui.addNotification(null, E('p', e.message), 'error') });
 		};
 		o.editable = true;

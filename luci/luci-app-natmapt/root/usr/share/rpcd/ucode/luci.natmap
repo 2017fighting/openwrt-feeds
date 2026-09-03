@@ -1,20 +1,100 @@
-#!/usr/bin/ucode
+// rpcd backend for luci-app-natmapt — the app's whole data path crosses this
+// seam. The JS view performs no raw status-file reads and no init.d execs
+// (service reload also rides this object; nothing shell-injectable crosses
+// without a charset check).
+//
+// IMPORTANT: ucode line comments are `//`, NOT shell-style `#`. rpcd compiles
+// this file as a ucode module (no shebang stripping, no `#` comments), so a
+// `#!/usr/bin/env ucode` line or any `# ...` comment is a hard syntax error
+// that makes rpcd silently drop the object — and every frontend rpc call
+// then 404s. Keep comments `//`.
+//
+// Methods (ACL grants exactly these names — see acl.d/luci-app-natmap.json):
+//   get_congestions  available TCP congestion algorithms (procfs)
+//   get_status       section status map keyed by sid, read from the section
+//                    status store's private files (/var/run/natmap/*.json)
+//   nattest          run the STUN NAT-behavior test (natcheck.sh), return
+//                    the plain-text udp/tcp results
+//   reload           /etc/init.d/natmap reload [section]
 
 'use strict';
 
-import { readfile } from 'fs';
+import { access, glob, popen, readfile } from 'fs';
+
+function run(cmd) {
+	let p = popen(cmd + ' 2>&1', 'r');
+	if (!p) return { code: -1, stdout: '' };
+	let stdout = p.read('all');
+	let code = p.close();
+	if (type(stdout) == 'string') stdout = replace(stdout, /^\s+|\s+$/g, '');
+	return { code: code, stdout: stdout || '' };
+}
+
+// Only [A-Za-z0-9:._-] ever reaches a shell command line from here.
+function shellsafe(s) {
+	return type(s) == 'string' && match(s, /^[A-Za-z0-9:._-]+$/) ? s : null;
+}
 
 const methods = {
 	get_congestions: {
 		call: function() {
 			const allowed_congestion = '/proc/sys/net/ipv4/tcp_allowed_congestion_control';
-			const available_congestion = '/proc/sys/net/ipv4/tcp_available_congestion_control';
-
 			const content = trim(readfile(allowed_congestion));
 			if (content)
 				return { algorithm: split(content, ' ') };
 			else
 				return { algorithm: [] };
+		}
+	},
+
+	get_status: {
+		call: function() {
+			let status = {};
+			for (let f in glob('/var/run/natmap/*.json') || []) {
+				let raw = readfile(f);
+				if (!raw) continue;
+				try {
+					let s = json(raw);
+					// the store's frozen schema always carries the section id
+					if (s?.sid) status[s.sid] = s;
+				} catch (e) { /* a torn write never happens (atomic rename),
+				                but a torn read of a foreign file must not 500 */ }
+			}
+			return status;
+		}
+	},
+
+	nattest: {
+		args: { udp_stun: 'host:port', tcp_stun: 'host:port', port: 'port' },
+		call: function(req) {
+			if (!access('/usr/bin/stunclient', 'x'))
+				return { error: 'stuntman-client (stunclient) is not installed' };
+
+			let udp = shellsafe(req.args?.udp_stun);
+			let tcp = shellsafe(req.args?.tcp_stun);
+			let port = shellsafe(req.args?.port);
+			if (!udp || !tcp || !port)
+				return { error: 'invalid nattest parameters' };
+
+			// natcheck.sh prints "UDP TEST:\n...\n\nTCP TEST:\n..." as plain
+			// text (rendering belongs to the view, not to a root shell).
+			let res = run('/usr/libexec/natmap/natcheck.sh ' + udp + ' ' + tcp + ' ' + port);
+			if (res.code != 0 && !match(res.stdout, /TCP TEST:/))
+				return { error: 'nattest failed: ' + res.stdout };
+
+			let m = match(res.stdout, /^UDP TEST:\n([\s\S]*?)\n*TCP TEST:\n([\s\S]*)$/);
+			return { udp: m?.[1] || 'Test timeout', tcp: m?.[2] || 'Test timeout' };
+		}
+	},
+
+	reload: {
+		args: { section: 'section id (optional)' },
+		call: function(req) {
+			let section = req.args?.section ? shellsafe(req.args?.section) : '';
+			if (req.args?.section && !section)
+				return { error: 'invalid section id' };
+			let res = run('/etc/init.d/natmap reload' + (section ? ' ' + section : ''));
+			return { success: res.code == 0, output: res.stdout };
 		}
 	}
 };
