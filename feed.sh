@@ -39,9 +39,9 @@ esac
 # Only the arches in feeds.config are built; fail early with a clear message
 # instead of a cryptic apk "no index" error on update.
 case "$arch" in
-x86_64 | aarch64_generic) ;;
+x86_64) ;;
 *)
-	echo "unsupported arch: $arch (published: x86_64, aarch64_generic)"
+	echo "unsupported arch: $arch (published: x86_64)"
 	exit 1
 	;;
 esac

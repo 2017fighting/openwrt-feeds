@@ -5,7 +5,7 @@ OpenWrt SDK in GitHub Actions and published as a **signed APK feed** to GitHub
 Pages.
 
 - **OpenWrt version:** 25.12.4 (APK package manager)
-- **Architectures:** `x86_64`, `aarch64_generic`
+- **Architectures:** `x86_64`
 - **Live binary feed:** <https://2017fighting.github.io/openwrt-feeds/25.12.4/>
 - **Packages:** `natmapt` + `luci-app-natmapt` (TCP/UDP port mapping for full-cone NAT + LuCI app; <https://github.com/heiher/natmap>), `stuntman-client` (STUN client used by natmapt's NAT-type test; <https://github.com/jselbie/stunserver>), and the **nikki stack** — `mihomo-alpha` (built from the personal mihomo fork: preferred-ip + heybox, pinned commit, x86-v3 on x86_64) + `nikki` + `luci-app-nikki` — bridged from <https://github.com/2017fighting/OpenWrt-nikki> via a pinned src-git feed
 - **Quick install:** `sh -c "$(wget -O- https://2017fighting.github.io/openwrt-feeds/feed.sh)"`
@@ -43,7 +43,9 @@ refuses opkg-only releases.
 ## Manual install
 
 The steps below are what `feed.sh` automates, in case you prefer to do them by
-hand. Swap `x86_64` for `aarch64_generic` on armsr/armv8 devices.
+hand. (Only `x86_64` is published; the matrix previously carried
+`aarch64_generic` — drop it from the repositories line if you still have an
+armsr/armv8 device pointed at an old slice.)
 
 ```sh
 # 1. Trust this feed's signing key (apk EC public key; apk reads all of /etc/apk/keys/)
