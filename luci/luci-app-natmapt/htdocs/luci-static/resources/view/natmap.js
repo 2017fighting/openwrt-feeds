@@ -50,12 +50,12 @@ const callHostHints = rpc.declare({
 
 // transformHostHints <family> <hosts> <html>
 function transformHostHints(family, hosts, html) {
-	let choice_values = [];
-	let choice_labels = {};
-	let ip6addrs = {};
-	let ipaddrs = {};
+	const choice_values = [];
+	const choice_labels = {};
+	const ip6addrs = {};
+	const ipaddrs = {};
 
-	for (let mac in hosts) {
+	for (const mac in hosts) {
 		L.toArray(hosts[mac].ipaddrs || hosts[mac].ipv4).forEach((ip) => {
 			ipaddrs[ip] = hosts[mac].name || mac;
 		});
@@ -67,8 +67,8 @@ function transformHostHints(family, hosts, html) {
 
 	if (!family || family == 'ipv4') {
 		L.sortedKeys(ipaddrs, null, 'addr').forEach((ip) => {
-			let val = ip;
-			let txt = ipaddrs[ip];
+			const val = ip;
+			const txt = ipaddrs[ip];
 
 			choice_values.push(val);
 			choice_labels[val] = html ? E([], [ val, ' (', E('strong', {}, [txt]), ')' ]) : '%s (%s)'.format(val, txt);
@@ -77,8 +77,8 @@ function transformHostHints(family, hosts, html) {
 
 	if (!family || family == 'ipv6') {
 		L.sortedKeys(ip6addrs, null, 'addr').forEach((ip) => {
-			let val = ip;
-			let txt = ip6addrs[ip];
+			const val = ip;
+			const txt = ip6addrs[ip];
 
 			choice_values.push(val);
 			choice_labels[val] = html ? E([], [ val, ' (', E('strong', {}, [txt]), ')' ]) : '%s (%s)'.format(val, txt);
@@ -122,11 +122,9 @@ return view.extend({
 		o = s.option(form.Button, '_reload', _('Reload'));
 		o.inputtitle = _('Reload');
 		o.inputstyle = 'apply';
-		o.onclick = function() {
-			return callReload('')
-				.then(() => { window.location.href = window.location.href.split('#')[0] })
+		o.onclick = () => callReload('')
+				.then(() => { window.location.hash = ''; window.location.reload(); })
 				.catch((e) => { ui.addNotification(null, E('p', e.message), 'error') });
-		};
 
 		o = s.option(form.Flag, 'enable', _('Enable'));
 		o.default = o.disabled;
@@ -172,40 +170,38 @@ return view.extend({
 		o.datatype = "and(port, min(1))";
 		o.placeholder = 3445;
 		o.rmempty = false;
-		o.validate = function(section_id, value) {
-			let conf = 'firewall';
-			let fw_forwards = uci.sections(conf, 'redirect');
-			let fw_rules = uci.sections(conf, 'rule');
+		o.validate = (section_id, value) => {
+			const conf = 'firewall';
+			const fw_forwards = uci.sections(conf, 'redirect');
+			const fw_rules = uci.sections(conf, 'rule');
 
 			for (let i = 0; i < fw_forwards.length; i++) {
-				let sid = fw_forwards[i]['.name'];
+				const sid = fw_forwards[i]['.name'];
 				if (value == uci.get(conf, sid, 'src_dport'))
 					return _('This port is already used');
 			};
 
 			for (let i = 0; i < fw_rules.length; i++) {
-				let sid = fw_rules[i]['.name'];
+				const sid = fw_rules[i]['.name'];
 				if (uci.get(conf, sid, 'name') == nattest_fw_rulename)
 					continue;
 				if ( (uci.get(conf, sid, 'dest') || '') == '' ) {
 					if (value == uci.get(conf, sid, 'dest_port'))
 						return _('This port is already used');
 				} else {
-					// dest not this device
-					continue;
 				}
 			};
 
 			return true;
 		};
-		o.write = function(section_id, value) {
+		o.write = (section_id, value) => {
 			uci.set(conf, section_id, 'test_port', value);
 
 			let found = false;
-			let fwcfg = 'firewall';
-			let rules = uci.sections(fwcfg, 'rule');
+			const fwcfg = 'firewall';
+			const rules = uci.sections(fwcfg, 'rule');
 			for (let i = 0; i < rules.length; i++) {
-				let sid = rules[i]['.name'];
+				const sid = rules[i]['.name'];
 				if (uci.get(fwcfg, sid, 'name') == nattest_fw_rulename) {
 					found = sid;
 					break;
@@ -214,10 +210,9 @@ return view.extend({
 
 			let wan_zone = 'wan';
 			if(wans) {
-				let def_wan = wans[0].getName();
-				let zones = uci.sections(fwcfg, 'zone');
+				const zones = uci.sections(fwcfg, 'zone');
 				for (let i = 0; i < zones.length; i++) {
-					let sid = zones[i]['.name'];
+					const sid = zones[i]['.name'];
 					if (uci.get(fwcfg, sid, 'masq') == 1) {
 						wan_zone = uci.get(fwcfg, sid, 'name');
 						break;
@@ -225,7 +220,7 @@ return view.extend({
 				}
 			} else {
 				for (let i = 0; i < rules.length; i++) {
-					let sid = rules[i]['.name'];
+					const sid = rules[i]['.name'];
 					if (uci.get(fwcfg, sid, 'src')) {
 						wan_zone = uci.get(fwcfg, sid, 'src');
 						break;
@@ -238,7 +233,7 @@ return view.extend({
 					uci.set(fwcfg, found, 'dest_port', value);
 					//fs.exec('/etc/init.d/firewall', ['reload']); // reload on init.d/natmap:service_triggers
 			} else {
-				let sid = uci.add(fwcfg, 'rule');
+				const sid = uci.add(fwcfg, 'rule');
 				uci.set(fwcfg, sid, 'name', nattest_fw_rulename);
 				uci.set(fwcfg, sid, 'src', wan_zone);
 				uci.set(fwcfg, sid, 'dest_port', value);
@@ -251,10 +246,10 @@ return view.extend({
 			_('Runs stunclient; requires <b>stuntman-client</b> (missing-dependency errors surface on click)'));
 		o.inputtitle = _('Check');
 		o.inputstyle = 'apply';
-		o.onclick = function() {
-			let test_port = uci.get_first(conf, 'global', 'test_port');
-			let udp_stun_host = uci.get_first(conf, 'global', 'def_udp_stun');
-			let tcp_stun_host = uci.get_first(conf, 'global', 'def_tcp_stun');
+		o.onclick = () => {
+			const test_port = uci.get_first(conf, 'global', 'test_port');
+			const udp_stun_host = uci.get_first(conf, 'global', 'def_udp_stun');
+			const tcp_stun_host = uci.get_first(conf, 'global', 'def_tcp_stun');
 
 			return callNattest(udp_stun_host + ':3478', tcp_stun_host + ':3478', test_port)
 				.then((res) => {
@@ -323,8 +318,8 @@ return view.extend({
 		o.value('0', 'TCP');
 		o.value('1', 'UDP');
 		o.textvalue = function(section_id) {
-			let cval = this.cfgvalue(section_id);
-			let i = this.keylist.indexOf(cval);
+			const cval = this.cfgvalue(section_id);
+			const i = this.keylist.indexOf(cval);
 			return this.vallist[i];
 		};
 
@@ -333,12 +328,12 @@ return view.extend({
 		o.value('ipv4', _('IPv4'));
 		o.value('ipv6', _('IPv6'));
 		o.textvalue = function(section_id) {
-			let cval = this.cfgvalue(section_id);
-			let i = this.keylist.indexOf(cval);
+			const cval = this.cfgvalue(section_id);
+			const i = this.keylist.indexOf(cval);
 			return this.vallist[i];
 		};
 		o.validate = function(section_id, value) {
-			let opt = this.section.getOption('forward_target').getUIElement(section_id),
+			const opt = this.section.getOption('forward_target').getUIElement(section_id),
 			choices = transformHostHints(value, hosts, true);
 
 			opt.clearChoices();
@@ -367,8 +362,8 @@ return view.extend({
 			_('If you enable <b>Notify Scripts</b>, you will be bombarded with messages'));
 		o.datatype = "or(port, portrange)";
 		o.rmempty = false;
-		o.validate = function(section_id, value) {
-			let regexp = new RegExp(/^([1-9]\d*)(-([1-9]\d*))?$/)
+		o.validate = (section_id, value) => {
+			const regexp = new RegExp(/^([1-9]\d*)(-([1-9]\d*))?$/)
 
 			if (!regexp.test(value))
 				return _('Expecting: %s').format(_('Non-0 port'));
@@ -386,14 +381,14 @@ return view.extend({
 		o.default = o.disabled;
 		o.rmempty = false;
 		o.textvalue = function(section_id) {
-			let cval = this.cfgvalue(section_id) || this.default;
-			let mode = function() {
-				let cval = this.cfgvalue(section_id) || this.default;
-				let i = this.keylist.indexOf(cval);
+			const cval = this.cfgvalue(section_id) || this.default;
+			const mode = function() {
+				const cval = this.cfgvalue(section_id) || this.default;
+				const i = this.keylist.indexOf(cval);
 				return [this.vallist[i], cval];
 			}.call(s.getOption('forward_mode'));
-			let loopback = function() {
-				let cval = this.cfgvalue(section_id) || this.default;
+			const loopback = function() {
+				const cval = this.cfgvalue(section_id) || this.default;
 				return (cval == this.enabled) ? ' L' : '';
 			}.call(s.getOption('natloopback'));
 			return (cval == this.enabled) ? mode[0] + (mode[1] === 'dnat' ? loopback : '') : _('No');
@@ -407,10 +402,10 @@ return view.extend({
 		o.retain = true;
 		o.depends('forward', '1');
 		o.modalonly = true;
-		o.validate = function(section_id, value) {
-			let family = function() {
-				let E = document.getElementById('widget.' + this.cbid(section_id).match(/.+\./) + 'family');
-				let i = E ? E.selectedIndex : null;
+		o.validate = (section_id, value) => {
+			const family = function() {
+				const E = document.getElementById('widget.' + this.cbid(section_id).match(/.+\./) + 'family');
+				const i = E ? E.selectedIndex : null;
 				return E ? E.options[i].value : null;
 			}.call(s.getOption('family'));
 
@@ -461,15 +456,15 @@ return view.extend({
 		o.depends('forward', '1');
 
 		((labels) => {
-			for (let val in labels)
+			for (const val in labels)
 				o.value(val, labels[val]);
 		})(transformHostHints(null, hosts, false)[1]);
 
 		o.textvalue = function(section_id) {
-			let cval = this.cfgvalue(section_id);
-			let i = this.keylist.indexOf(cval);
-			let enforward = function() {
-				let cval = this.cfgvalue(section_id) || this.default;
+			const cval = this.cfgvalue(section_id);
+			const i = this.keylist.indexOf(cval);
+			const enforward = function() {
+				const cval = this.cfgvalue(section_id) || this.default;
 				return (cval == this.enabled) ? true : false;
 			}.call(s.getOption('forward'));
 			return enforward ? this.vallist[i] ?? cval : _('No');
@@ -481,18 +476,18 @@ return view.extend({
 		o.retain = true;
 		o.depends('forward', '1');
 		o.textvalue = function(section_id) {
-			let cval = this.cfgvalue(section_id) || this.default;
-			let enforward = function() {
-				let cval = this.cfgvalue(section_id) || this.default;
+			const cval = this.cfgvalue(section_id) || this.default;
+			const enforward = function() {
+				const cval = this.cfgvalue(section_id) || this.default;
 				return (cval == this.enabled) ? true : false;
 			}.call(s.getOption('forward'));
-			let refresh = function() {
-				let cval = this.cfgvalue(section_id) || this.default;
+			const refresh = function() {
+				const cval = this.cfgvalue(section_id) || this.default;
 				return (cval == this.enabled) ? true : false;
 			}.call(s.getOption('refresh'));
-			let cltname = function() {
-				let cval = this.cfgvalue(section_id) || this.default;
-				let i = this.keylist.indexOf(cval);
+			const cltname = function() {
+				const cval = this.cfgvalue(section_id) || this.default;
+				const i = this.keylist.indexOf(cval);
 				return this.vallist[i];
 			}.call(s.getOption('clt_script'));
 			return enforward ? ((cval == '0' && refresh) ? cltname : cval) : _('No');
@@ -526,7 +521,7 @@ return view.extend({
 		o.retain = true;
 		o.depends('refresh', '1');
 		o.modalonly = true;
-		o.validate = function(section_id, value) {
+		o.validate = (section_id, value) => {
 			if (!value)
 				return true;
 			if (!/^https?:\/\/.+/i.test(value))
@@ -548,15 +543,15 @@ return view.extend({
 
 		o = s.option(form.DummyValue, '_external_ip', _('External IP'));
 		o.modalonly = false;
-		o.textvalue = function(section_id) {
-			let s = status[section_id];
+		o.textvalue = (section_id) => {
+			const s = status[section_id];
 			if (s) return s.ip;
 		};
 
 		o = s.option(form.DummyValue, '_external_port', _('External Port'));
 		o.modalonly = false;
-		o.textvalue = function(section_id) {
-			let s = status[section_id];
+		o.textvalue = (section_id) => {
+			const s = status[section_id];
 			if (s) return s.port;
 		};
 
@@ -637,13 +632,13 @@ return view.extend({
 
 		o = s.taboption('ddns', form.DummyValue, '_ddns_srv_dump', _('SRV Record'));
 		o.rawhtml = false;
-		o.cfgvalue = function(section_id) {
-			let fqdn = uci.get(conf, section_id, 'ddns_srv');
-			let serv = uci.get(conf, section_id, 'ddns_srv_serv');
-			let prot = uci.get(conf, section_id, 'ddns_srv_proto');
-			let targ = uci.get(conf, section_id, 'ddns_srv_target') || fqdn;
-			let prio = uci.get(conf, section_id, 'ddns_srv_priority');
-			let weig = uci.get(conf, section_id, 'ddns_srv_weight');
+		o.cfgvalue = (section_id) => {
+			const fqdn = uci.get(conf, section_id, 'ddns_srv');
+			const serv = uci.get(conf, section_id, 'ddns_srv_serv');
+			const prot = uci.get(conf, section_id, 'ddns_srv_proto');
+			const targ = uci.get(conf, section_id, 'ddns_srv_target') || fqdn;
+			const prio = uci.get(conf, section_id, 'ddns_srv_priority');
+			const weig = uci.get(conf, section_id, 'ddns_srv_weight');
 
 			if ( fqdn && serv && prot && targ && prio && weig )
 				return '_' + serv + '._' + prot + '.' + fqdn + '. <TTL> IN SRV　' + prio + ' ' + weig + ' <port> ' + targ + '.';
@@ -697,11 +692,11 @@ return view.extend({
 
 		o = s.taboption('ddns', form.DummyValue, '_ddns_https_dump', _('HTTPS Record'));
 		o.rawhtml = false;
-		o.cfgvalue = function(section_id) {
-			let fqdn = uci.get(conf, section_id, 'ddns_https');
-			let targ = uci.get(conf, section_id, 'ddns_https_target');
-			let svcp = uci.get(conf, section_id, 'ddns_https_svcparams');
-			let prio = uci.get(conf, section_id, 'ddns_https_priority');
+		o.cfgvalue = (section_id) => {
+			const fqdn = uci.get(conf, section_id, 'ddns_https');
+			const targ = uci.get(conf, section_id, 'ddns_https_target');
+			const svcp = uci.get(conf, section_id, 'ddns_https_svcparams');
+			const prio = uci.get(conf, section_id, 'ddns_https_priority');
 
 			if ( fqdn && targ && svcp && prio )
 				return fqdn + '. <TTL> IN HTTPS　' + prio + ' ' + targ + ' ' + svcp;
@@ -743,10 +738,8 @@ return view.extend({
 		o = s.option(form.Button, '_reload');
 		o.inputtitle = _('⭮');
 		o.inputstyle = 'apply';
-		o.onclick = function(ev, section_id) {
-			return callReload(section_id)
+		o.onclick = (ev, section_id) => callReload(section_id)
 				.catch((e) => { ui.addNotification(null, E('p', e.message), 'error') });
-		};
 		o.editable = true;
 		o.modalonly = false;
 
