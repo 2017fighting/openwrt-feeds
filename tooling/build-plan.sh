@@ -434,7 +434,7 @@ cmd_prefetch() {
 }
 
 cmd_compile() {
-	local sdk="$1" pkg bin out bridgedir
+	local sdk="$1" pkg bin out bridgedir pkgdir
 	[ -n "$ARCH" ] || die "ARCH is required for compile/verify"
 	out="$sdk/bin/packages/$ARCH/$FEED_NAME"
 	for pkg in $COMPILE_ORDER; do
@@ -485,6 +485,23 @@ cmd_compile() {
 			file "$bin" | grep -q ELF || die "mihomo smoke: $bin is not an ELF binary"
 			strings "$bin" | grep -q "alpha-fork-" || die "mihomo smoke: fork version string missing from $bin"
 			file "$bin"
+			;;
+		mihomo-bare)
+			# Script-only package in THIS feed (no upstream, no compile step):
+			# the make target just lays files into .pkgdir. Smoke the installed
+			# tree instead of a binary — `sh -n` catches the class of error that
+			# would otherwise only show up on the device at boot.
+			(cd "$sdk" && make "package/feeds/$FEED_NAME/mihomo-bare/compile" -j"$(nproc)" V=s)
+			ls -l "$out"/mihomo-bare-*.apk
+			pkgdir=$(find "$sdk/build_dir" -type d -path '*/mihomo-bare/.pkgdir/mihomo-bare' | head -1)
+			[ -n "$pkgdir" ] || die "mihomo-bare: .pkgdir not found in build_dir"
+			for f in etc/init.d/mihomo-bare usr/sbin/mihomo-bare-update etc/uci-defaults/90-mihomo-bare; do
+				[ -f "$pkgdir/$f" ] || die "mihomo-bare smoke: missing $f"
+				sh -n "$pkgdir/$f" || die "mihomo-bare smoke: $f fails sh -n"
+			done
+			[ -f "$pkgdir/etc/config/mihomo-bare" ] || die "mihomo-bare smoke: missing uci config"
+			head -1 "$pkgdir/etc/init.d/mihomo-bare" | grep -q '^#!/bin/sh /etc/rc.common' \
+				|| die "mihomo-bare smoke: init shebang is not the rc.common form"
 			;;
 		nikki)
 			# Script/config package from the bridge feed.
