@@ -1,0 +1,30 @@
+#!/bin/sh
+# 首次安装/升级后的一次性布置（uci-defaults 语义：跑完即删）。
+#
+# 只做两件机器不能自己完成的事：
+#   1. 把拉取行写进 /etc/crontabs/root（cron 才认它；uci 里只存片段）
+#   2. 确保工作目录存在、服务已 enable
+# 幂等：重复执行只会重写同一行。
+[ -n "${IPKG_INSTROOT}" ] && exit 0
+
+. /lib/functions.sh
+
+NAME=mihomo-bare
+# 先声明再让 config_get 赋值(shellcheck 不跟踪 lib/functions.sh 里的隐式赋值)
+dir='' cron=''
+config_load "$NAME"
+
+config_get dir main dir /etc/mihomo
+config_get cron main update_cron '*/30 * * * *'
+
+mkdir -p "$dir" /etc/crontabs
+
+# 先摘掉旧行（升级时 uci 里的 cron 片段可能改了），再按当前值装回去
+sed -i "/mihomo-bare-update/d" /etc/crontabs/root 2>/dev/null
+[ -n "$cron" ] && echo "$cron /usr/sbin/mihomo-bare-update #mihomo-bare-update" \
+	>>/etc/crontabs/root
+
+/etc/init.d/cron reload 2>/dev/null || /etc/init.d/cron restart 2>/dev/null
+/etc/init.d/$NAME enable 2>/dev/null
+
+exit 0

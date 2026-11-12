@@ -7,7 +7,7 @@ Pages.
 - **OpenWrt version:** 25.12.4 (APK package manager)
 - **Architectures:** `x86_64`
 - **Live binary feed:** <https://2017fighting.github.io/openwrt-feeds/25.12.4/>
-- **Packages:** `natmapt` + `luci-app-natmapt` (TCP/UDP port mapping for full-cone NAT + LuCI app; <https://github.com/heiher/natmap>), `stuntman-client` (STUN client used by natmapt's NAT-type test; <https://github.com/jselbie/stunserver>), and the **nikki stack** — `mihomo-alpha` (built from the personal mihomo fork: preferred-ip + heybox, pinned commit, x86-v3 on x86_64) + `nikki` + `luci-app-nikki` — bridged from <https://github.com/2017fighting/OpenWrt-nikki> via a pinned src-git feed
+- **Packages:** `natmapt` + `luci-app-natmapt` (TCP/UDP port mapping for full-cone NAT + LuCI app; <https://github.com/heiher/natmap>), `stuntman-client` (STUN client used by natmapt's NAT-type test; <https://github.com/jselbie/stunserver>), `mihomo-bare` (the bare-mihomo router runtime: procd + fetch/validate/swap, no nikki wrapper), and the **nikki stack** — `mihomo-alpha` (built from the personal mihomo fork: preferred-ip + heybox, pinned commit, x86-v3 on x86_64) + `nikki` + `luci-app-nikki` — bridged from <https://github.com/2017fighting/OpenWrt-nikki> via a pinned src-git feed
 - **Quick install:** `sh -c "$(wget -O- https://2017fighting.github.io/openwrt-feeds/feed.sh)"`
 
 This repository is **both** the source feed (OpenWrt package `Makefile`s on
@@ -105,6 +105,7 @@ dispatch):
 ```
 net/natmapt/           # natmapt — TCP/UDP port mapping for full-cone NAT (binary + scripts + init)
 net/stuntman/          # stuntman-client — STUN client (stunclient) for natmapt's NAT-type test
+net/mihomo-bare/       # bare-mihomo router runtime (init + fetch/validate/swap + uci) — script-only, no compile
 luci/luci-app-natmapt/ # the natmapt LuCI app (htdocs + rpcd + translations)
 keys/                 # apk EC public signing key (committed; private key is a CI secret)
 tooling/              # keygen + Pages index helpers (gen-key.sh, make-index.sh)
@@ -116,13 +117,15 @@ feeds.config          # supported feeds (version x arch) — drives the build ma
 ## Adding a package
 
 Drop a new `<category>/<pkg>/Makefile` (standard OpenWrt package definition) at
-the repo root, then wire it into `.github/workflows/build.yml`: add it to the
-`feeds install` line and a `make package/feeds/$FEED_NAME/<pkg>/compile` step.
-It is **not** automatic — the SDK ships no core package sources and only builds
-feed packages, so anything needing a core lib (openssl/boost/…) or a standard
-runtime dep needs the patterns described in [`CLAUDE.md`](CLAUDE.md) (runtime-only
-deps via the unregistered `packages` feed; core libs pulled into this feed at
-CI time).
+the repo root, then add the directory name to `COMPILE_ORDER` (and, if it ships
+an apk under a new name, to the `cmd_verify` glob list) in
+[`tooling/build-plan.sh`](tooling/build-plan.sh) — that module owns install,
+compile order and verification, and `tooling/tests/` asserts it against the
+Makefiles. Nothing goes into `build.yml` by hand. It is **not** automatic —
+the SDK ships no core package sources and only builds feed packages, so anything
+needing a core lib (openssl/boost/…) or a standard runtime dep needs the patterns
+described in [`CLAUDE.md`](CLAUDE.md) (runtime-only deps via the unregistered
+`packages` feed; core libs pulled into this feed at CI time).
 
 ## Adding a version or architecture
 
@@ -134,7 +137,8 @@ in `build.yml`). The SDK tarball URL is derived from the entry.
 Package sources retain their upstream licenses. `natmapt` is **MIT** and
 `luci-app-natmapt` is **Apache-2.0** (<https://github.com/heiher/natmap>,
 <https://github.com/muink/luci-app-natmapt>). `stuntman` is **Apache-2.0**
-(<https://github.com/jselbie/stunserver>). This feed also ships `libopenssl`
+(<https://github.com/jselbie/stunserver>). `mihomo-bare` is **MIT** (this repo's
+own scripts). This feed also ships `libopenssl`
 (**Apache-2.0**) and `boost` (**BSL-1.0**) — pulled in at CI time as
 stuntman-client's build/runtime deps (redundant with the device's core, same
 versions).

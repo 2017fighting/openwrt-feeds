@@ -33,6 +33,28 @@ names a concept that code, docs, and conversation should share.
   commit 的 `src-git nikki`：指向 `2017fighting/OpenWrt-nikki`，三件套的
   Makefile 只在那边维护，本仓库不拷贝包目录。升级 = bump 桥上的 commit。
 
+- **桥（nikki bridge）** — build plan 在 SDK `feeds.conf` 里写入的一行钉住
+  commit 的 `src-git nikki`：指向 `2017fighting/OpenWrt-nikki`，三件套的
+  Makefile 只在那边维护，本仓库不拷贝包目录。升级 = bump 桥上的 commit。
+
+## mihomo-bare
+
+- **裸核** — 路由器上只跑 mihomo 本体、不跑 nikki 包装层的那种部署形态：
+  转面由核自己的 `tun.auto-route/auto-redirect` 建，配置原样来自
+  `mihomo-headless-worker` 的 router 档案。术语与决策在那边：
+  `CONTEXT.md` 的「裸核」、`docs/adr/0017`。
+
+- **外壳包** — `net/mihomo-bare`：**纯脚本包**（无上游源码、无编译步骤），
+  装 procd 守护、拉取校验脚本与 uci。依赖 `mihomo-alpha` 提供核：本仓库
+  不重复提供核。它只负责「把配置喂给核并盯着它」，**不**带 nft/ip rule/cgroup。
+
+- **拉取校验** — `/usr/sbin/mihomo-bare-update` 的一次运行：curl 取订阅
+  → `mihomo -t` 预检 → 字节比对 → 变了才原子替换并重启。预检失败丢弃
+  新配置、继续跑上一份（坏配置不上线）。
+
+- **失败开放（DNS）** — mihomo 停机时局域网仍能解析：dnsmasq 的
+  `dns_redirect` 链保留作兜底，mihomo 的链优先级在它之前，活着时自然是它应答。
+
 ## CI
 
 - **Build plan** — the derived description of what CI builds inside the

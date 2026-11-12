@@ -165,7 +165,8 @@ _packages() {
 # Compile order. The set is derived (plan warns about anything unlisted); the
 # order is curated — the proven sequence, each luci app after its service
 # package, bridge stack last.
-COMPILE_ORDER="natmapt stuntman luci-app-natmapt mihomo-alpha nikki luci-app-nikki"
+# mihomo-bare 紧跟它依赖的核（mihomo-alpha 在 bridge 里）：同一次构建先出核再出外壳。
+COMPILE_ORDER="natmapt stuntman luci-app-natmapt mihomo-alpha mihomo-bare nikki luci-app-nikki"
 
 # _prefetch <makefile> <pkg> — emit url=/dest= for one tarball package; skip
 # git-sourced packages (the SDK clones those itself). Git variant = has
@@ -268,7 +269,7 @@ cmd_plan() {
 
 	_header verify
 	echo "verify.out=bin/packages/\${ARCH}/$FEED_NAME"
-	for g in natmapt stuntman-client luci-app-natmapt mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-cn; do
+	for g in natmapt stuntman-client luci-app-natmapt mihomo-alpha mihomo-bare nikki luci-app-nikki luci-i18n-nikki-zh-cn; do
 		echo "verify.apk=$g-*.apk"
 	done
 }
@@ -518,7 +519,7 @@ cmd_verify() {
 	[ -n "$ARCH" ] || die "ARCH is required for compile/verify"
 	out="$sdk/bin/packages/$ARCH/$FEED_NAME"
 	step "verify apks in $out"
-	for g in natmapt stuntman-client luci-app-natmapt mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-cn; do
+	for g in natmapt stuntman-client luci-app-natmapt mihomo-alpha mihomo-bare nikki luci-app-nikki luci-i18n-nikki-zh-cn; do
 		# natmapt-* also covers its script splits; the rest are one apk each
 		# (or PKGARCH:=all, indexed under every arch slice).
 		ls -l "$out"/$g-*.apk || fails=$((fails + 1))

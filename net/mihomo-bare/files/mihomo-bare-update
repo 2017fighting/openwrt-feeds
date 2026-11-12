@@ -1,0 +1,67 @@
+#!/bin/sh
+# 拉取 → 预检 → 原子替换 → 需要时重启（docs/adr/0017）。
+#
+# 「预检」是这份脚本存在的主要理由：mihomo -t 用真核解析一遍新配置，失败就丢掉这份
+# 新文件、保留正在跑的那份 —— 一份坏配置等于全家断网，宁可停在上一个已知可用版本。
+#
+# 「需要时重启」而非定时盲重启：nikki 每天 3 点无条件 restart，本脚本只有在字节变化
+# 时才动服务。服务不在跑（首次装机 / 崩溃后被停用）时也拉起来 —— cron 兼任自愈。
+set -eu
+
+. /lib/functions.sh
+
+NAME=mihomo-bare
+# 先声明再让 config_get 赋值:shellcheck 不跟踪 /lib/functions.sh 里的隐式赋值
+dir='' core='' url='' ua='' timeout=''
+config_load "$NAME"
+
+config_get dir main dir /etc/mihomo
+config_get core main core /usr/bin/mihomo
+config_get url main subscription_url ''
+config_get ua main user_agent 'mihomo router/1.0'
+config_get timeout main fetch_timeout 60
+
+log() { logger -t "$NAME" "$*"; }
+
+[ -n "$url" ] || {
+	log "subscription_url 未设置：uci set $NAME.main.subscription_url=… && uci commit $NAME"
+	exit 1
+}
+[ -x "$core" ] || {
+	log "核不可执行：$core（装 mihomo-alpha，或改 uci $NAME.main.core）"
+	exit 1
+}
+
+mkdir -p "$dir"
+tmp="$dir/config.yaml.new"
+cur="$dir/config.yaml"
+trap 'rm -f "$tmp"' EXIT INT TERM
+
+if ! curl -fsSL --max-time "$timeout" -A "$ua" -o "$tmp" "$url"; then
+	log "拉取失败：$url（保留现有配置，不动服务）"
+	exit 1
+fi
+
+# 服务端 500 时可能回一段 YAML 之外的错误体；先确认不是空文件，再交给核做真解析
+if [ ! -s "$tmp" ]; then
+	log "拉回来的配置是空文件：$url"
+	exit 1
+fi
+
+if ! "$core" -t -d "$dir" -f "$tmp" >/dev/null 2>&1; then
+	log "预检失败：新配置被丢弃，继续跑现有配置（$("$core" -v 2>&1 | head -1)）"
+	exit 1
+fi
+
+if [ -f "$cur" ] && cmp -s "$tmp" "$cur"; then
+	# 字节没变:不重启。但仍要确认服务活着(可能被手动 stop 过)
+	# 用 pgrep 而不是 /etc/init.d 的 running —— 后者是 init 脚本内部函数,外部调不到
+	pgrep -f "$core -d $dir" >/dev/null && exit 0
+	/etc/init.d/$NAME start
+	exit 0
+fi
+
+mv "$tmp" "$cur"
+log "配置已更新，重启 $NAME"
+/etc/init.d/$NAME restart >/dev/null 2>&1 || /etc/init.d/$NAME start
+exit 0

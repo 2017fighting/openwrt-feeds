@@ -54,7 +54,7 @@ assert_eq "corelib install extras" \
 	"$(echo "$i" | sed -n 's/^install.extras=//p')" "libopenssl boost golang "
 got=$(echo "$i" | sed -n 's/^install.package=//p' | sort | tr '\n' ' ')
 assert_eq "install set == every Makefile dir under net/ and luci/" "$got" \
-	"luci-app-natmapt natmapt stuntman "
+	"luci-app-natmapt mihomo-bare natmapt stuntman "
 got=$(echo "$i" | sed -n 's/^install.bridge=//p' | tr '\n' ' ')
 assert_eq "bridge packages join the install set (i18n split ships with its app source)" "$got" \
 	"mihomo-alpha nikki luci-app-nikki "
@@ -83,7 +83,7 @@ echo "$p" | grep -q '^prefetch.stuntman\.' &&
 c=$(bp_section compile)
 got=$(echo "$c" | sed -n 's/^compile.target=package\/feeds\/[a-z]*\///p' | sed 's/\/compile$//' | tr '\n' ' ')
 assert_eq "compile order" "$got" \
-	"natmapt stuntman luci-app-natmapt mihomo-alpha nikki luci-app-nikki "
+	"natmapt stuntman luci-app-natmapt mihomo-alpha mihomo-bare nikki luci-app-nikki "
 echo "$c" | grep -qx 'compile.target=package/feeds/nikki/mihomo-alpha/compile' &&
 	ok "bridge packages compile under the nikki feed target" ||
 	bad "bridge packages compile under the nikki feed target"
@@ -98,13 +98,13 @@ echo "$c" | grep -q '^compile.unlisted=' &&
 v=$(bp_section verify)
 gfail=0
 for g in natmapt stuntman-client luci-app-natmapt \
-	mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-cn; do
+	mihomo-alpha mihomo-bare nikki luci-app-nikki luci-i18n-nikki-zh-cn; do
 	echo "$v" | grep -Fxq "verify.apk=$g-*.apk" || {
 		bad "verify glob present: $g"
 		gfail=1
 	}
 done
-[ "$gfail" -eq 0 ] && ok "all seven verify globs present"
+[ "$gfail" -eq 0 ] && ok "all eight verify globs present"
 
 # ---- CLI guards
 if sh "$BP" bogus >/dev/null 2>&1; then

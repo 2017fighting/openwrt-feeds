@@ -1,0 +1,56 @@
+#!/bin/sh /etc/rc.common
+# 裸核 mihomo 的 procd 外壳（docs/adr/0017）。
+#
+# 与 nikki 的关键差别：这里**没有** nft 表、ip rule、cgroup 旁路、订阅 UA 之外的任何
+# 中间层。转面由核自己的 tun.auto-route / auto-redirect 建（配置由服务端下发），
+# 本脚本只做四件事：读 uci、护着进程、把 config.yaml 当变更信号、第一次没配置就去取。
+
+# shellcheck disable=SC2034  # rc.common 读 START/STOP/USE_PROCD
+START=99
+STOP=10
+USE_PROCD=1
+
+NAME=mihomo-bare
+PROG=/usr/sbin/mihomo-bare-update
+
+service_triggers() {
+	procd_add_reload_trigger "$NAME"
+}
+
+# local 是 busybox ash 的扩展:这些脚本在设备上永远由 ash 执行
+# shellcheck disable=SC3043
+start_service() {
+	local enabled dir core fetch_timeout
+	config_load "$NAME"
+	config_get_bool enabled main enabled 1
+	[ "$enabled" = 1 ] || return 0
+	config_get dir main dir /etc/mihomo
+	config_get core main core /usr/bin/mihomo
+	config_get fetch_timeout main fetch_timeout 60
+
+	mkdir -p "$dir"
+
+	# 首次开机 / 换机：没有配置就先取一份。取不到不阻塞启动流程（cron 会再来），
+	# 但也不去跑一个空核 —— 让日志说清楚为什么没起。
+	if [ ! -s "$dir/config.yaml" ]; then
+		"$PROG" || {
+			logger -t "$NAME" "no $dir/config.yaml yet (fetch failed); cron will retry"
+			return 0
+		}
+	fi
+
+	procd_open_instance
+	procd_set_param command "$core" -d "$dir"
+	# 崩了就一直拉起来：这是全家的网关，停着比反复重启更糟
+	procd_set_param respawn 3600 5 5
+	procd_set_param limits nofile="65536 65536"
+	# 输出进 syslog（logd），与 nikki 的 mirror-to-syslog 同效；不落磁盘，不需要清理 cron
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	procd_close_instance
+}
+
+stop_service() {
+	# tun/路由表/nft 由核自己拆；这里只等它退干净
+	sleep 1
+}
