@@ -493,7 +493,8 @@ cmd_compile() {
 			# would otherwise only show up on the device at boot.
 			(cd "$sdk" && make "package/feeds/$FEED_NAME/mihomo-bare/compile" -j"$(nproc)" V=s)
 			ls -l "$out"/mihomo-bare-*.apk
-			pkgdir=$(find "$sdk/build_dir" -type d -path '*/mihomo-bare/.pkgdir/mihomo-bare' | head -1)
+			# 构建目录带版本号（mihomo-bare-<PKG_VERSION>），所以只匹配 .pkgdir 层
+			pkgdir=$(find "$sdk/build_dir" -type d -path '*/.pkgdir/mihomo-bare' 2>/dev/null | head -1)
 			[ -n "$pkgdir" ] || die "mihomo-bare: .pkgdir not found in build_dir"
 			for f in etc/init.d/mihomo-bare usr/sbin/mihomo-bare-update etc/uci-defaults/90-mihomo-bare; do
 				[ -f "$pkgdir/$f" ] || die "mihomo-bare smoke: missing $f"
