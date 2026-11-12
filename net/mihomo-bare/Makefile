@@ -15,6 +15,12 @@ PKG_MAINTAINER:=2017fighting <2017fighting@users.noreply.github.com>
 
 include $(INCLUDE_DIR)/package.mk
 
+# 没有源码、没有编译步骤 —— 但必须显式给出空的 Build/Compile：默认的 Build/Default
+# 会去 $(PKG_BUILD_DIR) 里跑 make,而那个目录是空的(构建在 `.built` 这一步以 Error 2
+# 收场,CI 里表现为 "failed to build" 而看不到任何编译输出)。
+define Build/Compile
+endef
+
 define Package/mihomo-bare
   SECTION:=net
   CATEGORY:=Network
