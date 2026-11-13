@@ -501,6 +501,11 @@ cmd_compile() {
 				sh -n "$pkgdir/$f" || die "mihomo-bare smoke: $f fails sh -n"
 			done
 			[ -f "$pkgdir/etc/config/mihomo-bare" ] || die "mihomo-bare smoke: missing uci config"
+			# 回程豁免的 nft 文件:runner 上没有 CAP_NET_ADMIN,nft -c 跑不了,
+			# 只验证存在 + 头部不是空文件 + 关键规则那行在(语法靠设备上首启验证)
+			[ -s "$pkgdir/etc/mihomo-bare/reply-bypass.nft" ] || die "mihomo-bare smoke: missing reply-bypass.nft"
+			grep -q 'ct direction reply' "$pkgdir/etc/mihomo-bare/reply-bypass.nft" \
+				|| die "mihomo-bare smoke: reply-bypass.nft lacks the ct direction reply rule"
 			head -1 "$pkgdir/etc/init.d/mihomo-bare" | grep -q '^#!/bin/sh /etc/rc.common' \
 				|| die "mihomo-bare smoke: init shebang is not the rc.common form"
 			;;

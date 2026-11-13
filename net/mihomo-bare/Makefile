@@ -9,7 +9,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=mihomo-bare
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=1
+PKG_RELEASE:=3
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=2017fighting <2017fighting@users.noreply.github.com>
 
@@ -44,6 +44,8 @@ endef
 define Package/mihomo-bare/install
 	$(INSTALL_DIR) $(1)/etc/config
 	$(INSTALL_CONF) ./files/mihomo-bare.config $(1)/etc/config/mihomo-bare
+	$(INSTALL_DIR) $(1)/etc/mihomo-bare
+	$(INSTALL_DATA) ./files/reply-bypass.nft $(1)/etc/mihomo-bare/reply-bypass.nft
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/mihomo-bare.init $(1)/etc/init.d/mihomo-bare
 	$(INSTALL_DIR) $(1)/usr/sbin

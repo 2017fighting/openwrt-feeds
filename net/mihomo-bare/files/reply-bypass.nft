@@ -1,0 +1,31 @@
+#!/usr/sbin/nft -f
+# 回程豁免(openwrt-feeds CONTEXT「回程豁免」;mihomo-headless-worker docs/adr/0017 2026-11-13 修订)
+#
+# tun.auto-route 的 ip rule 用 "not iif lo → table 2022" 一把抓,不看 conntrack 方向;
+# fw4 DNAT 过的入站连接(natmap 端口映射、fullcone UDP、hairpin 反射)回程包也是
+# "iif br-lan、dst=公网",与 LAN 发起的出站无从区分,全被吞进 tun —— mihomo 没见过
+# 这些流的握手(入站腿走的是 fw4 DNAT),收到 mid-flow 包只能丢,对端收不到 SYN-ACK,
+# 表现为「洞打得开、数据进不来」(2026-11-12 夜 natmap 全部失效的根因)。
+#
+# nikki 的等价物是每条链头部的 "ct direction reply return"(实测计数 3000 万+ 包)。
+# 这里用 mark + ip rule 还原同一语义:回程包打 0x99,由 init 脚本加
+#   ip rule pref 8999 fwmark 0x99/0xff lookup main   (v4/v6,先于 mihomo 的 9000-9010)
+# → 查 main 出 pppoe,不进 tun。
+#
+# 只影响「已建立连接的回程」方向,对其他路径无行为变化:
+# - 出站新流(original 方向)照旧进 tun;
+# - tun 内回来的包(iif mihomo → LAN 客户端)查 main 也是走 br-lan,与原路径相同;
+# - 送往路由器自身的包先命中 "lookup local"(pref 0),mark 不参与;
+# - 路由器自身发出的包不过 prerouting,不会被 mark。
+#
+# mark 0x99 的选值:避开 tailscale 0x80000/0xff0000、natmap 心跳 0x42、
+# sing-tun auto-redirect 0x2023/0x2024,均无重叠;ip rule 用 /0xff 掩码只看低字节。
+table inet mihomo_bare
+delete table inet mihomo_bare
+
+table inet mihomo_bare {
+	chain prerouting {
+		type filter hook prerouting priority mangle; policy accept;
+		ct direction reply meta mark set 0x99
+	}
+}

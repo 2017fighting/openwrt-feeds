@@ -5,15 +5,23 @@
 # 新文件、保留正在跑的那份 —— 一份坏配置等于全家断网，宁可停在上一个已知可用版本。
 #
 # 「需要时重启」而非定时盲重启：nikki 每天 3 点无条件 restart，本脚本只有在字节变化
-# 时才动服务。服务不在跑（首次装机 / 崩溃后被停用）时也拉起来 —— cron 兼任自愈。
-set -eu
+# 时才动服务。服务不在跑（首次装机 / 崩溃后被停用）时也拉起来 —— cron 兼任自愈；
+# 但服务被 uci 停用（enabled=0，比如回退到 nikki 过渡期）就什么都不做：
+# 不拉取、更不许把核拉起来 —— 否则 cron 每 30 分钟制造一次双核冲突
+# （2026-11-13 早 08:30 事故：bind 全部 address already in use + tun 路由冲突）。
 
-. /lib/functions.sh
-
+# /lib/functions.sh 里的 config_load 会在内部引用一批只在装机/加载过程中才有值的变量
+# （$IPKG_INSTROOT、CONFIG_LIST_STATE …）。所以 **不能** 开 set -u：它在这个环境里
+# 会连续炸在别人家的代码上。改用 set -e，每个用到的变量都显式 config_get 默认值。
 NAME=mihomo-bare
-# 先声明再让 config_get 赋值:shellcheck 不跟踪 /lib/functions.sh 里的隐式赋值
+. /lib/functions.sh
+set -e
+
+enabled=''
 dir='' core='' url='' ua='' timeout=''
 config_load "$NAME"
+config_get_bool enabled main enabled 1
+[ "$enabled" = 1 ] || exit 0
 
 config_get dir main dir /etc/mihomo
 config_get core main core /usr/bin/mihomo
