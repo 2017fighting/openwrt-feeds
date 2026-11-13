@@ -2,14 +2,15 @@
 #
 # 纯脚本包：没有上游源码，也没有编译步骤 —— 装的是 mihomo 的**运行时外壳**
 # （procd 守护 + 拉取校验 + 面板目录约定），核本身由 mihomo-alpha 提供。
-# 它取代 nikki 的「包 + uci 模型 + nft 转面」三件套里不需要的那两层：
-# 透明代理转面由 mihomo 自己的 tun.auto-route/auto-redirect 承担（docs/adr/0017
-# 在 mihomo-headless-worker 侧），路由器上只剩「把配置喂给核并盯着它」。
+# 它取代了 nikki 包装层里不需要的那些层：「包 + uci 模型 + nft 转面」中
+# 只需要「把配置喂给核」这一层。透明代理转面由 mihomo 自己的
+# tun.auto-route/auto-redirect 承担（docs/adr/0017 在 mihomo-headless-worker 侧），
+# 路由器上只剩「把配置喂给核并盯着它」。
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=mihomo-bare
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=4
+PKG_RELEASE:=5
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=2017fighting <2017fighting@users.noreply.github.com>
 
@@ -26,7 +27,7 @@ define Package/mihomo-bare
   CATEGORY:=Network
   TITLE:=Bare mihomo runtime for routers (no nikki wrapper)
   URL:=https://github.com/2017fighting/mihomo-headless-worker
-  # 核就来自身边的 mihomo-alpha（同一个 fork，带 preferred-ip / heybox）。
+  # 核就来自身边的 mihomo-alpha（官方 Alpha 钉点，装 /usr/libexec/mihomo）。
   # 订阅用 curl 拉取；ca-bundle 供 DoH/wss 订阅的 TLS 校验。
   DEPENDS:=+mihomo-alpha +curl +ca-bundle
 endef

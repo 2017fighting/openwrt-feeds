@@ -24,7 +24,7 @@ config_get_bool enabled main enabled 1
 [ "$enabled" = 1 ] || exit 0
 
 config_get dir main dir /etc/mihomo
-config_get core main core /usr/bin/mihomo
+config_get core main core /usr/libexec/mihomo
 config_get url main subscription_url ''
 config_get ua main user_agent 'mihomo router/1.0'
 config_get timeout main fetch_timeout 60

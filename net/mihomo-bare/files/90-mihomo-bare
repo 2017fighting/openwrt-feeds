@@ -1,9 +1,12 @@
 #!/bin/sh
 # 首次安装/升级后的一次性布置（uci-defaults 语义：跑完即删）。
 #
-# 只做两件机器不能自己完成的事：
+# 只做三件机器不能自己完成的事：
 #   1. 把拉取行写进 /etc/crontabs/root（cron 才认它；uci 里只存片段）
 #   2. 确保工作目录存在、服务已 enable
+#   3. 把老设备里写死的 /usr/bin/mihomo 改到 /usr/libexec/mihomo：mihomo-alpha
+#      不再建 /usr/bin 符号链接（docs/adr/0001），而 /etc/config/mihomo-bare 是
+#      conffile，升级不会替设备改这一行 —— 不改就是「核不可执行」。
 # 幂等：重复执行只会重写同一行。
 [ -n "${IPKG_INSTROOT}" ] && exit 0
 
@@ -18,6 +21,10 @@ config_get dir main dir /etc/mihomo
 config_get cron main update_cron '*/30 * * * *'
 
 mkdir -p "$dir" /etc/crontabs
+
+# 老配置里的核路径迁移：只改指向 /usr/bin/mihomo 的那一行，已是新路径则原样不动
+sed -i "s|^\([[:space:]]*\)option core '/usr/bin/mihomo'$|\1option core '/usr/libexec/mihomo'|" \
+	"/etc/config/$NAME" 2>/dev/null
 
 # 先摘掉旧行（升级时 uci 里的 cron 片段可能改了），再按当前值装回去
 sed -i "/mihomo-bare-update/d" /etc/crontabs/root 2>/dev/null
