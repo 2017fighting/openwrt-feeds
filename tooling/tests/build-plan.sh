@@ -13,7 +13,7 @@ assert_eq "feed name default" \
 echo "$plan" | grep -q "^src_link=src-link openwrtfeeds $ROOT\$" &&
 	ok "src_link points at the repo root" || bad "src_link points at the repo root"
 assert_eq "feeds.conf policy" \
-	"$(echo "$plan" | sed -n 's/^feeds_conf_policy=//p')" "luci+base+this-feed+nikki-bridge"
+	"$(echo "$plan" | sed -n 's/^feeds_conf_policy=//p')" "luci+base+this-feed"
 
 # ---- [corelibs] — strategy-level refs only (Q11)
 c=$(bp_section corelibs)
@@ -38,15 +38,11 @@ assert_eq "golang ref is the SDK-pinned strategy" \
 assert_eq "golang stays at its repo path (bundle, not single package)" \
 	"$(echo "$c" | sed -n 's/^corelib.golang.feed_dest=//p')" "lang/golang"
 
-# ---- [bridge] — the pinned second feed carrying the nikki stack
-b=$(bp_section bridge)
-assert_eq "bridge repo" "$(echo "$b" | sed -n 's/^bridge.repo=//p')" \
-	"https://github.com/2017fighting/OpenWrt-nikki.git"
-assert_eq "bridge ref is a full commit sha (reproducible)" \
-	"$(echo "$b" | sed -n 's/^bridge.ref=//p' | grep -cE '^[0-9a-f]{40}$')" "1"
-got=$(echo "$b" | sed -n 's/^bridge.package=//p' | sort | tr '\n' ' ')
-assert_eq "bridge package set" "$got" \
-	"luci-app-nikki luci-i18n-nikki-zh-cn mihomo-alpha nikki "
+# ---- [no second feed] — the nikki bridge is gone (docs/adr/0001)
+echo "$plan" | grep -q '^bridge\.' &&
+	bad "no bridge section in the plan" || ok "no bridge section in the plan"
+echo "$plan" | grep -q '^src-git ' &&
+	bad "plan declares no src-git feed" || ok "plan declares no src-git feed"
 
 # ---- [install] — derived source set + corelib extras
 i=$(bp_section install)
@@ -54,10 +50,9 @@ assert_eq "corelib install extras" \
 	"$(echo "$i" | sed -n 's/^install.extras=//p')" "libopenssl boost golang "
 got=$(echo "$i" | sed -n 's/^install.package=//p' | sort | tr '\n' ' ')
 assert_eq "install set == every Makefile dir under net/ and luci/" "$got" \
-	"luci-app-natmapt mihomo-bare natmapt stuntman "
-got=$(echo "$i" | sed -n 's/^install.bridge=//p' | tr '\n' ' ')
-assert_eq "bridge packages join the install set (i18n split ships with its app source)" "$got" \
-	"mihomo-alpha nikki luci-app-nikki "
+	"luci-app-natmapt mihomo-alpha mihomo-bare natmapt stuntman "
+assert_eq "mihomo-alpha is installed from this feed, not a bridge" \
+	"$(echo "$i" | sed -n 's/^install.bridge=//p' | wc -l | tr -d ' ')" "0"
 
 # ---- [config] — engine-off fragment present verbatim
 cfg=$(bp_section config)
@@ -78,18 +73,26 @@ assert_eq "natmap dest derived" \
 echo "$p" | grep -q '^prefetch.stuntman\.' &&
 	bad "git-proto source skipped from prefetch" ||
 	ok "git-proto source skipped from prefetch"
+# mihomo-alpha carries no PKG_MIRROR_HASH on purpose: the git-source rule must
+# read its PKG_SOURCE_URL (.git suffix), or CI would curl a git URL.
+assert_eq "mihomo-alpha source url is a .git url (the prefetch skip rule)" \
+	"$(sed -n 's/^PKG_SOURCE_URL:=\(.*\.git\)$/\1/p' "$ROOT/net/mihomo-alpha/Makefile" | head -1)" \
+	"https://github.com/MetaCubeX/mihomo.git"
+echo "$p" | grep -q '^prefetch.mihomo-alpha\.' &&
+	bad "mihomo-alpha skipped from prefetch (git source, no mirror hash)" ||
+	ok "mihomo-alpha skipped from prefetch (git source, no mirror hash)"
 
 # ---- [compile] — curated order, no unlisted packages
 c=$(bp_section compile)
 got=$(echo "$c" | sed -n 's/^compile.target=package\/feeds\/[a-z]*\///p' | sed 's/\/compile$//' | tr '\n' ' ')
 assert_eq "compile order" "$got" \
-	"natmapt stuntman luci-app-natmapt mihomo-alpha mihomo-bare nikki luci-app-nikki "
-echo "$c" | grep -qx 'compile.target=package/feeds/nikki/mihomo-alpha/compile' &&
-	ok "bridge packages compile under the nikki feed target" ||
-	bad "bridge packages compile under the nikki feed target"
-echo "$c" | grep -q '^compile.bridge_relocate=nikki/' &&
-	ok "bridge apk relocation is declared in the plan" ||
-	bad "bridge apk relocation is declared in the plan"
+	"natmapt stuntman luci-app-natmapt mihomo-alpha mihomo-bare "
+echo "$c" | grep -q '^compile.target=package/feeds/nikki/' &&
+	bad "no compile target under a bridge feed" ||
+	ok "no compile target under a bridge feed"
+echo "$c" | grep -q '^compile.target=package/feeds/openwrtfeeds/mihomo-alpha/compile$' &&
+	ok "mihomo-alpha compiles under this feed's target" ||
+	bad "mihomo-alpha compiles under this feed's target"
 echo "$c" | grep -q '^compile.unlisted=' &&
 	bad "every derived package has a compile slot" ||
 	ok "every derived package has a compile slot"
@@ -98,13 +101,13 @@ echo "$c" | grep -q '^compile.unlisted=' &&
 v=$(bp_section verify)
 gfail=0
 for g in natmapt stuntman-client luci-app-natmapt \
-	mihomo-alpha mihomo-bare nikki luci-app-nikki luci-i18n-nikki-zh-cn; do
+	mihomo-alpha mihomo-bare; do
 	echo "$v" | grep -Fxq "verify.apk=$g-*.apk" || {
 		bad "verify glob present: $g"
 		gfail=1
 	}
 done
-[ "$gfail" -eq 0 ] && ok "all eight verify globs present"
+[ "$gfail" -eq 0 ] && ok "all five verify globs present"
 
 # ---- CLI guards
 if sh "$BP" bogus >/dev/null 2>&1; then

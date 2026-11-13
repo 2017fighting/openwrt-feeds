@@ -9,8 +9,8 @@
 # Subcommands:
 #   plan                    hermetic dry-run: print the derived plan as
 #                           line-oriented key=value grouped by [section]
-#   register   <sdk-dir>    seed feeds.conf (luci only + this repo + nikki
-#                           bridge), idempotent
+#   register   <sdk-dir>    seed feeds.conf (luci + base + this repo),
+#                           idempotent
 #   corelibs   <sdk-dir>    sparse-checkout boost + openssl into this feed
 #   install    <sdk-dir>    feeds update -a + install the derived source names
 #   config     <sdk-dir>    write the .config seed and run make defconfig
@@ -113,15 +113,10 @@ corelib_probe() {
 }
 
 # ---------------------------------------------------------------------------
-# The nikki bridge — the only second feed this repo trusts. The nikki stack
-# (mihomo-alpha built from the personal mihomo fork + nikki + luci-app-nikki
-# + zh-hans i18n split) lives in 2017fighting/OpenWrt-nikki, pinned by
-# commit; its Makefiles are never copied here. Upgrading the stack = bump
-# BRIDGE_REF to that repo's pushed HEAD (see its docs/adr/0001).
-BRIDGE_FEED=nikki
-BRIDGE_REPO=https://github.com/2017fighting/OpenWrt-nikki.git
-BRIDGE_REF=82094803e2ef8740be850314207ff1890d939787
-BRIDGE_PKGS="mihomo-alpha nikki luci-app-nikki luci-i18n-nikki-zh-cn"
+# There is no second feed. The nikki stack used to arrive through a pinned
+# src-git bridge (2017fighting/OpenWrt-nikki); docs/adr/0001 removed it and
+# brought mihomo-alpha's package definition into this repo instead. Everything
+# CI builds now comes from this feed's own Makefiles, plus the borrowed golang.
 
 # ---------------------------------------------------------------------------
 # Derivation from the feed's own Makefiles.
@@ -164,20 +159,25 @@ _packages() {
 
 # Compile order. The set is derived (plan warns about anything unlisted); the
 # order is curated — the proven sequence, each luci app after its service
-# package, bridge stack last.
-# mihomo-bare 紧跟它依赖的核（mihomo-alpha 在 bridge 里）：同一次构建先出核再出外壳。
-COMPILE_ORDER="natmapt stuntman luci-app-natmapt mihomo-alpha mihomo-bare nikki luci-app-nikki"
+# package. mihomo-bare 紧跟它依赖的核 mihomo-alpha：同一次构建先出核再出外壳。
+COMPILE_ORDER="natmapt stuntman luci-app-natmapt mihomo-alpha mihomo-bare"
 
 # _prefetch <makefile> <pkg> — emit url=/dest= for one tarball package; skip
-# git-sourced packages (the SDK clones those itself). Git variant = has
-# PKG_MIRROR_HASH and no PKG_HASH: Makefiles with a tarball-vs-git ifeq/else
-# pair (natmapt's) declare PROTO:=git only in the git branch, so a naive
-# first-assignment PROTO read would misclassify the tarball branch as git.
+# git-sourced packages (the SDK clones those itself). Git variant = the FIRST
+# PKG_SOURCE_URL assignment ends in .git.
+#
+# The URL is read rather than PKG_MIRROR_HASH on purpose: mihomo-alpha drops the
+# mirror hash deliberately (a git tarball's sha256 cannot be computed offline,
+# so keeping it would cost one doomed CI run per bump — see its Makefile), and
+# PKG_SOURCE_PROTO alone is unreliable because a tarball-vs-git ifeq/else pair
+# (natmapt's) declares PROTO:=git only inside the git branch, so a
+# first-assignment PROTO read would misclassify the tarball branch as git. In
+# such a pair the first URL is the tarball one, which is what this rule wants.
 _prefetch() {
 	local mf="$1" pkg="$2" url src
-	if [ -n "$(_mkvar "$mf" PKG_MIRROR_HASH)" ] && [ -z "$(_mkvar "$mf" PKG_HASH)" ]; then
-		return 0
-	fi
+	case "$(_mkvar "$mf" PKG_SOURCE_URL)" in
+	*.git) return 0 ;;
+	esac
 	url=$(_expand "$mf" "$(_mkvar "$mf" PKG_SOURCE_URL)") || return 0
 	src=$(_expand "$mf" "$(_mkvar "$mf" PKG_SOURCE)") || return 0
 	[ -n "$url" ] && [ -n "$src" ] || return 0
@@ -211,7 +211,7 @@ cmd_plan() {
 	echo "feed_name=$FEED_NAME"
 	echo "feed_root=$FEED_ROOT"
 	echo "src_link=src-link $FEED_NAME $FEED_ROOT"
-	echo "feeds_conf_policy=luci+base+this-feed+nikki-bridge"
+	echo "feeds_conf_policy=luci+base+this-feed"
 
 	_header corelibs
 	for lib in $CORELIBS; do
@@ -222,21 +222,9 @@ cmd_plan() {
 		echo "corelib.$lib.extra=$(corelib_extra "$lib")"
 	done
 
-	_header bridge
-	echo "bridge.feed=$BRIDGE_FEED"
-	echo "bridge.repo=$BRIDGE_REPO"
-	echo "bridge.ref=$BRIDGE_REF"
-	for pkg in $BRIDGE_PKGS; do echo "bridge.package=$pkg"; done
-
 	_header install
 	echo "install.extras=$(for lib in $CORELIBS; do corelib_installname "$lib"; done | tr '\n' ' ')"
 	for pkg in $(_packages); do echo "install.package=$pkg"; done
-	for pkg in $BRIDGE_PKGS; do
-		case $pkg in
-		luci-i18n-*) ;; # split: ships with its app source, not installable
-		*) echo "install.bridge=$pkg" ;;
-		esac
-	done
 
 	_header config
 	for lib in $CORELIBS; do corelib_config "$lib"; done
@@ -253,12 +241,8 @@ cmd_plan() {
 
 	_header compile
 	for pkg in $COMPILE_ORDER; do
-		case " $BRIDGE_PKGS " in
-		*" $pkg "*) echo "compile.target=package/feeds/$BRIDGE_FEED/$pkg/compile" ;;
-		*) echo "compile.target=package/feeds/$FEED_NAME/$pkg/compile" ;;
-		esac
+		echo "compile.target=package/feeds/$FEED_NAME/$pkg/compile"
 	done
-	echo "compile.bridge_relocate=$BRIDGE_FEED/*.apk -> \$FEED_NAME"
 	for pkg in $(_packages); do
 		case " $COMPILE_ORDER " in
 		*" $pkg "*) ;;
@@ -269,17 +253,17 @@ cmd_plan() {
 
 	_header verify
 	echo "verify.out=bin/packages/\${ARCH}/$FEED_NAME"
-	for g in natmapt stuntman-client luci-app-natmapt mihomo-alpha mihomo-bare nikki luci-app-nikki luci-i18n-nikki-zh-cn; do
+	for g in natmapt stuntman-client luci-app-natmapt mihomo-alpha mihomo-bare; do
 		echo "verify.apk=$g-*.apk"
 	done
 }
 
 cmd_register() {
 	local sdk="$1" conf="$1/feeds.conf"
-	step "register feed (luci + base + this repo + $BRIDGE_FEED bridge)"
+	step "register feed (luci + base + this repo)"
 	# The SDK ships feeds.conf.default (base/packages/luci/...) but no
 	# feeds.conf. Seed it with luci AND base only:
-	#   luci  luci.mk apps (luci-app-nikki includes feeds/luci/luci.mk).
+	#   luci  luci.mk apps (luci-app-natmapt includes feeds/luci/luci.mk).
 	#   base  the openwrt main repo itself (--root=package): provides the
 	#         core packages (rpcd, ucode, libnl-tiny, lua, libubox, ...) that
 	#         the +luci-base closure of a luci.mk app force-builds — without
@@ -302,10 +286,6 @@ cmd_register() {
 	fi
 	grep -qxF "src-link $FEED_NAME $FEED_ROOT" "$conf" ||
 		printf 'src-link %s %s\n' "$FEED_NAME" "$FEED_ROOT" >>"$conf"
-	# The bridge: pinned src-git so every CI build is reproducible against
-	# exactly one OpenWrt-nikki commit (upgrade = bump BRIDGE_REF).
-	grep -q "^src-git $BRIDGE_FEED " "$conf" ||
-		printf 'src-git %s %s^%s\n' "$BRIDGE_FEED" "$BRIDGE_REPO" "$BRIDGE_REF" >>"$conf"
 	echo "--- feeds.conf ---"
 	cat "$conf"
 }
@@ -361,12 +341,6 @@ cmd_install() {
 	local sdk="$1" names="" lib pkg
 	for lib in $CORELIBS; do names="$names $(corelib_installname "$lib")"; done
 	for pkg in $(_packages); do names="$names $pkg"; done
-	for pkg in $BRIDGE_PKGS; do
-		case $pkg in
-		luci-i18n-*) continue ;; # split of luci-app-nikki: built with its source
-		esac
-		names="$names $pkg"
-	done
 	step "feeds update + install:$names"
 	(
 		cd "$sdk"
@@ -385,20 +359,11 @@ cmd_install() {
 		./scripts/feeds install $names
 		# feeds install silently skips a name missing from every feed index —
 		# fail HERE, not five minutes later at compile. Split packages
-		# (libopenssl -> openssl, luci-i18n-nikki-zh-cn -> luci-app-nikki)
-		# stage under their SOURCE name, so assert on the source set.
+		# (libopenssl -> openssl, natmapt's script splits) stage under their
+		# SOURCE name, so assert on the source set.
 		for pkg in openssl boost golang $(_packages); do
 			ls -d "$sdk"/package/feeds/*/$pkg >/dev/null 2>&1 ||
 				die "feeds install did not stage $pkg (metadata dump or name mismatch)"
-		done
-		# Bridge packages must stage under the BRIDGE feed specifically — a
-		# duplicate index entry (e.g. the SDK tree living inside the src-link
-		# checkout) makes feeds install pick the wrong feed and every
-		# package/feeds/$BRIDGE_FEED/... compile target goes missing.
-		for pkg in $BRIDGE_PKGS; do
-			case $pkg in luci-i18n-*) continue ;; esac # split: staged under its app
-			ls -d "$sdk/package/feeds/$BRIDGE_FEED/$pkg" >/dev/null 2>&1 ||
-				die "$pkg not staged under feed $BRIDGE_FEED (duplicate index entry?)"
 		done
 	)
 }
@@ -434,7 +399,7 @@ cmd_prefetch() {
 }
 
 cmd_compile() {
-	local sdk="$1" pkg bin out bridgedir pkgdir
+	local sdk="$1" pkg bin out pkgdir ver
 	[ -n "$ARCH" ] || die "ARCH is required for compile/verify"
 	out="$sdk/bin/packages/$ARCH/$FEED_NAME"
 	for pkg in $COMPILE_ORDER; do
@@ -468,12 +433,11 @@ cmd_compile() {
 			ls -l "$out"/luci-app-natmapt-*.apk
 			;;
 		mihomo-alpha)
-			# Bridge package: git-sourced from the personal mihomo fork (the SDK
-			# clones it itself — no dl/ pre-fetch). golang/host comes from the
-			# golang corelib; GOAMD64=v3 on x86_64 is set by the package Makefile,
-			# so the amd64 binary is v3 — check ELF + embedded version string,
-			# never exec (cross-arch on aarch64, and stays uniform here).
-			(cd "$sdk" && make "package/feeds/$BRIDGE_FEED/mihomo-alpha/compile" -j"$(nproc)" V=s)
+			# This feed's own package now (docs/adr/0001), git-sourced from the
+			# pinned upstream Alpha commit (the SDK clones it itself — no dl/
+			# pre-fetch). golang/host comes from the golang corelib. Check ELF +
+			# the exact embedded version string, never exec a target-arch binary.
+			(cd "$sdk" && make "package/feeds/$FEED_NAME/mihomo-alpha/compile" -j"$(nproc)" V=s)
 			# After a successful build OpenWrt AUTOREMOVES the package build dir
 			# (only .pkgdir — the installed file tree — and stamp files survive),
 			# so search the whole package dir: the binary sits at
@@ -483,7 +447,11 @@ cmd_compile() {
 				-type f -name mihomo 2>/dev/null | head -1)
 			[ -n "$bin" ] || die "mihomo binary not found in build_dir"
 			file "$bin" | grep -q ELF || die "mihomo smoke: $bin is not an ELF binary"
-			strings "$bin" | grep -q "alpha-fork-" || die "mihomo smoke: fork version string missing from $bin"
+			# 断言串从 Makefile 现读（不在这里抄一份）：PKG_BUILD_VERSION 就是
+			# 核里嵌的 alpha-<sha7>，它同时证明「拉到的是钉住的 commit」而不是缓存旧包。
+			ver=$(_mkvar "$FEED_ROOT/net/mihomo-alpha/Makefile" PKG_BUILD_VERSION)
+			[ -n "$ver" ] || die "mihomo-alpha: PKG_BUILD_VERSION not found in its Makefile"
+			strings "$bin" | grep -q "$ver" || die "mihomo smoke: version '$ver' not embedded in $bin"
 			file "$bin"
 			;;
 		mihomo-bare)
@@ -501,6 +469,12 @@ cmd_compile() {
 				sh -n "$pkgdir/$f" || die "mihomo-bare smoke: $f fails sh -n"
 			done
 			[ -f "$pkgdir/etc/config/mihomo-bare" ] || die "mihomo-bare smoke: missing uci config"
+			# 核路径必须与 mihomo-alpha 的实际安装位置一致（docs/adr/0001 删了
+			# /usr/bin/mihomo 符号链接），且老设备的 conffile 靠 uci-defaults 迁移。
+			grep -q "/usr/libexec/mihomo" "$pkgdir/etc/config/mihomo-bare" \
+				|| die "mihomo-bare smoke: default core is not /usr/libexec/mihomo"
+			grep -q "usr/bin/mihomo" "$pkgdir/etc/uci-defaults/90-mihomo-bare" \
+				|| die "mihomo-bare smoke: uci-defaults lacks the /usr/bin/mihomo migration"
 			# 回程豁免的 nft 文件:runner 上没有 CAP_NET_ADMIN,nft -c 跑不了,
 			# 只验证存在 + 头部不是空文件 + 关键规则那行在(语法靠设备上首启验证)
 			[ -s "$pkgdir/etc/mihomo-bare/reply-bypass.nft" ] || die "mihomo-bare smoke: missing reply-bypass.nft"
@@ -509,32 +483,9 @@ cmd_compile() {
 			head -1 "$pkgdir/etc/init.d/mihomo-bare" | grep -q '^#!/bin/sh /etc/rc.common' \
 				|| die "mihomo-bare smoke: init shebang is not the rc.common form"
 			;;
-		nikki)
-			# Script/config package from the bridge feed.
-			(cd "$sdk" && make "package/feeds/$BRIDGE_FEED/nikki/compile" -j"$(nproc)" V=s)
-			ls -l "$sdk/bin/packages/$ARCH/$BRIDGE_FEED"/nikki-*.apk
-			;;
-		luci-app-nikki)
-			# The source build also packages ALL i18n splits (ru, zh-hans,
-			# zh-hant) — splits have no compile target of their own (same as
-			# natmapt's script splits). Assert the one we ship for.
-			(cd "$sdk" && make "package/feeds/$BRIDGE_FEED/luci-app-nikki/compile" -j"$(nproc)" V=s)
-			ls -l "$sdk/bin/packages/$ARCH/$BRIDGE_FEED"/luci-app-nikki-*.apk
-			ls -l "$sdk/bin/packages/$ARCH/$BRIDGE_FEED"/luci-i18n-nikki-zh-cn-*.apk
-			;;
 		*) die "no compile recipe for $pkg (extend cmd_compile)" ;;
 		esac
 	done
-	# The SDK bins packages into the owning feed's dir; the bridge stack thus
-	# lands in bin/packages/$ARCH/$BRIDGE_FEED. Everything downstream (index,
-	# sign, site slice) only looks at $FEED_NAME — relocate so ONE adb covers
-	# the whole feed, and drop the bridge dir so package/index cannot grow a
-	# second index the device never sees.
-	bridgedir="$sdk/bin/packages/$ARCH/$BRIDGE_FEED"
-	if [ -d "$bridgedir" ]; then
-		mv "$bridgedir"/*.apk "$out"/
-		rm -rf "$bridgedir"
-	fi
 }
 
 cmd_verify() {
@@ -542,7 +493,7 @@ cmd_verify() {
 	[ -n "$ARCH" ] || die "ARCH is required for compile/verify"
 	out="$sdk/bin/packages/$ARCH/$FEED_NAME"
 	step "verify apks in $out"
-	for g in natmapt stuntman-client luci-app-natmapt mihomo-alpha mihomo-bare nikki luci-app-nikki luci-i18n-nikki-zh-cn; do
+	for g in natmapt stuntman-client luci-app-natmapt mihomo-alpha mihomo-bare; do
 		# natmapt-* also covers its script splits; the rest are one apk each
 		# (or PKGARCH:=all, indexed under every arch slice).
 		ls -l "$out"/$g-*.apk || fails=$((fails + 1))
