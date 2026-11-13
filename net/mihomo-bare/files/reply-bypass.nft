@@ -26,6 +26,6 @@ delete table inet mihomo_bare
 table inet mihomo_bare {
 	chain prerouting {
 		type filter hook prerouting priority mangle; policy accept;
-		ct direction reply meta mark set 0x99
+		ct direction reply counter meta mark set 0x99
 	}
 }
