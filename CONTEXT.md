@@ -23,19 +23,19 @@ names a concept that code, docs, and conversation should share.
   `/usr/lib/natmap/update.sh` (publish), external readers via the public URL
   `/natmap/<name>.json` served by uhttpd.
 
-## nikki 栈
+## mihomo 核
 
-- **三件套** — `mihomo-alpha`（源自 2017fighting/mihomo fork）+
-  `nikki` + `luci-app-nikki`。本 feed 全量提供这三包，设备侧不再混用
-  官方 nikki feed，`mihomo` 虚拟包因此只有单一提供者。
+- **核（mihomo-alpha）** — 本 feed 自持包定义的 mihomo 二进制：官方
+  `MetaCubeX/mihomo` Alpha 分支的**钉点**，装 `/usr/libexec/mihomo`（不建
+  `/usr/bin` 符号链接），唯一消费者是 `mihomo-bare`。决策见 `docs/adr/0001`。
+  _Avoid_: 内核、代理内核、fork 核
 
-- **桥（nikki bridge）** — build plan 在 SDK `feeds.conf` 里写入的一行钉住
-  commit 的 `src-git nikki`：指向 `2017fighting/OpenWrt-nikki`，三件套的
-  Makefile 只在那边维护，本仓库不拷贝包目录。升级 = bump 桥上的 commit。
-
-- **桥（nikki bridge）** — build plan 在 SDK `feeds.conf` 里写入的一行钉住
-  commit 的 `src-git nikki`：指向 `2017fighting/OpenWrt-nikki`，三件套的
-  Makefile 只在那边维护，本仓库不拷贝包目录。升级 = bump 桥上的 commit。
+- **钉点（pin）** — `net/mihomo-alpha/Makefile` 里同源的三处常量：
+  `PKG_SOURCE_VERSION`（40 位 sha）、`PKG_VERSION`（该提交的日期，apk 只按它
+  判升级）、`PKG_BUILD_VERSION`（`alpha-<sha7>`，嵌进核里，CI 冒烟 grep 它）。
+  升核 = 三处一起改；刻意不写 `PKG_MIRROR_HASH`（git tarball 的 sha256 无法
+  离线推算），代价是 build plan 必须按 `PKG_SOURCE_URL` 以 `.git` 结尾来认
+  git 源。_Avoid_: 版本、分支、频道
 
 ## mihomo-bare
 
@@ -45,8 +45,9 @@ names a concept that code, docs, and conversation should share.
   `CONTEXT.md` 的「裸核」、`docs/adr/0017`。
 
 - **外壳包** — `net/mihomo-bare`：**纯脚本包**（无上游源码、无编译步骤），
-  装 procd 守护、拉取校验脚本与 uci。依赖 `mihomo-alpha` 提供核：本仓库
-  不重复提供核。它只负责「把配置喂给核并盯着它」，**不**带 nft/ip rule/cgroup。
+  装 procd 守护、拉取校验脚本与 uci。依赖 `mihomo-alpha` 提供核 —— 核包同样
+  住本仓库，但核是核、壳是壳：壳自己不编译任何东西。它只负责「把配置喂给核
+  并盯着它」，**不**带 nft/ip rule/cgroup。
 
 - **拉取校验** — `/usr/sbin/mihomo-bare-update` 的一次运行：curl 取订阅
   → `mihomo -t` 预检 → 字节比对 → 变了才原子替换并重启。预检失败丢弃
