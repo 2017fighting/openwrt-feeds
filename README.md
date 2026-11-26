@@ -144,8 +144,9 @@ entry.
 
 ## License
 
-`punchd` is built from <https://github.com/2017fighting/punch>, which carries no
-`LICENSE` file yet — so this feed asserts no license for it (`PKG_LICENSE` is
-deliberately left unset there). The `golang` toolchain is borrowed at CI time
+`punchd` is built from <https://github.com/2017fighting/punch> — **MIT** since `v0.1.0`,
+the commit the pin points at (before that the repository had no `LICENSE`, which is
+why this feed asserted none). The apk therefore declares `PKG_LICENSE:=MIT` and
+`PKG_LICENSE_FILES:=LICENSE`. The `golang` toolchain is borrowed at CI time
 from <https://github.com/openwrt/packages> (**BSD-3-Clause**) to build it; the
 apk feed itself publishes only `punchd`.
