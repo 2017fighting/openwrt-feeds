@@ -70,6 +70,14 @@ names a concept that code, docs, and conversation should share.
 - **失败开放（DNS）** — mihomo 停机时局域网仍能解析：dnsmasq 的
   `dns_redirect` 链保留作兜底，mihomo 的链优先级在它之前，活着时自然是它应答。
 
+## punchd
+
+- **punchd** — 路由器侧的 punch agent（`net/punchd/`；源 = `2017fighting/punch` 的
+  钉点提交）：集群是唯一的声明源，它每 15s 拉一次期望列表，起/停每个 punch 的 natmap
+  子进程，把 DNAT 渲染进 fw4 的 `ruleset-post` 再回读校验。装完**不自启** —— token
+  是设备本地的（`/etc/punch/token`，本包不带），由运维放好后再 enable。
+  _Avoid_: punch 客户端、punch 容器、punch 插件
+
 ## CI
 
 - **Build plan** — the derived description of what CI builds inside the

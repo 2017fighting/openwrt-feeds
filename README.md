@@ -7,7 +7,7 @@ Pages.
 - **OpenWrt version:** 25.12.4 (APK package manager)
 - **Architectures:** `x86_64`
 - **Live binary feed:** <https://2017fighting.github.io/openwrt-feeds/25.12.4/>
-- **Packages:** `natmapt` + `luci-app-natmapt` (TCP/UDP port mapping for full-cone NAT + LuCI app; <https://github.com/heiher/natmap>), `stuntman-client` (STUN client used by natmapt's NAT-type test; <https://github.com/jselbie/stunserver>), `mihomo-bare` (the bare-mihomo router runtime: procd + fetch/validate/swap + a tiny conntrack reply bypass so port-forwards survive TUN auto-route; no nikki wrapper), and `mihomo-alpha` (the core `mihomo-bare` runs: built here from a commit-pinned upstream <https://github.com/MetaCubeX/mihomo> `Alpha` branch, `GOAMD64=v1` on x86_64)
+- **Packages:** `natmapt` + `luci-app-natmapt` (TCP/UDP port mapping for full-cone NAT + LuCI app; <https://github.com/heiher/natmap>), `stuntman-client` (STUN client used by natmapt's NAT-type test; <https://github.com/jselbie/stunserver>), `mihomo-bare` (the bare-mihomo router runtime: procd + fetch/validate/swap + a tiny conntrack reply bypass so port-forwards survive TUN auto-route; no nikki wrapper), `mihomo-alpha` (the core `mihomo-bare` runs: built here from a commit-pinned upstream <https://github.com/MetaCubeX/mihomo> `Alpha` branch, `GOAMD64=v1` on x86_64), and `punchd` (the router side of the declared CGNAT punch: pulls the desired `Punch` list from the cluster, keeps one `natmap` child per punch and renders the DNAT into fw4's `ruleset-post`; built here from a commit-pinned <https://github.com/2017fighting/punch>)
 - **Quick install:** `sh -c "$(wget -O- https://2017fighting.github.io/openwrt-feeds/feed.sh)"`
 
 This repository is **both** the source feed (OpenWrt package `Makefile`s on
@@ -105,6 +105,7 @@ dispatch):
 ```
 net/natmapt/           # natmapt — TCP/UDP port mapping for full-cone NAT (binary + scripts + init)
 net/stuntman/          # stuntman-client — STUN client (stunclient) for natmapt's NAT-type test
+net/punchd/            # punchd — declared-CGNAT punch agent (Go: natmap children + fw4 include)
 net/mihomo-bare/       # bare-mihomo router runtime (init + fetch/validate/swap + uci) — script-only, no compile
 luci/luci-app-natmapt/ # the natmapt LuCI app (htdocs + rpcd + translations)
 keys/                 # apk EC public signing key (committed; private key is a CI secret)
@@ -138,7 +139,9 @@ Package sources retain their upstream licenses. `natmapt` is **MIT** and
 `luci-app-natmapt` is **Apache-2.0** (<https://github.com/heiher/natmap>,
 <https://github.com/muink/luci-app-natmapt>). `stuntman` is **Apache-2.0**
 (<https://github.com/jselbie/stunserver>). `mihomo-bare` is **MIT** (this repo's
-own scripts). This feed also ships `libopenssl`
+own scripts) and `punchd` is built from <https://github.com/2017fighting/punch>,
+which carries no `LICENSE` file yet — so this feed asserts no license for it
+(`PKG_LICENSE` is deliberately left unset there). This feed also ships `libopenssl`
 (**Apache-2.0**) and `boost` (**BSL-1.0**) — pulled in at CI time as
 stuntman-client's build/runtime deps (redundant with the device's core, same
 versions).

@@ -50,7 +50,7 @@ assert_eq "corelib install extras" \
 	"$(echo "$i" | sed -n 's/^install.extras=//p')" "libopenssl boost golang "
 got=$(echo "$i" | sed -n 's/^install.package=//p' | sort | tr '\n' ' ')
 assert_eq "install set == every Makefile dir under net/ and luci/" "$got" \
-	"luci-app-natmapt mihomo-alpha mihomo-bare natmapt stuntman "
+	"luci-app-natmapt mihomo-alpha mihomo-bare natmapt punchd stuntman "
 assert_eq "mihomo-alpha is installed from this feed, not a bridge" \
 	"$(echo "$i" | sed -n 's/^install.bridge=//p' | wc -l | tr -d ' ')" "0"
 
@@ -81,12 +81,23 @@ assert_eq "mihomo-alpha source url is a .git url (the prefetch skip rule)" \
 echo "$p" | grep -q '^prefetch.mihomo-alpha\.' &&
 	bad "mihomo-alpha skipped from prefetch (git source, no mirror hash)" ||
 	ok "mihomo-alpha skipped from prefetch (git source, no mirror hash)"
+# punchd 同一条规则（同一理由：git tarball 的 sha256 无法离线推算），而且钉的必须
+# 是一个 40 位 sha —— 跟分支就让「可复现」这句话失效了。
+assert_eq "punchd source url is a .git url (the prefetch skip rule)" \
+	"$(sed -n 's/^PKG_SOURCE_URL:=\(.*\.git\)$/\1/p' "$ROOT/net/punchd/Makefile" | head -1)" \
+	"https://github.com/2017fighting/punch.git"
+echo "$p" | grep -q '^prefetch.punchd\.' &&
+	bad "punchd skipped from prefetch (git source, no mirror hash)" ||
+	ok "punchd skipped from prefetch (git source, no mirror hash)"
+assert_eq "punchd is pinned by a 40-hex commit sha" \
+	"$(sed -n 's/^PKG_SOURCE_VERSION:=\([0-9a-f]\{40\}\)$/\1/p' "$ROOT/net/punchd/Makefile" | wc -l | tr -d ' ')" \
+	"1"
 
 # ---- [compile] — curated order, no unlisted packages
 c=$(bp_section compile)
 got=$(echo "$c" | sed -n 's/^compile.target=package\/feeds\/[a-z]*\///p' | sed 's/\/compile$//' | tr '\n' ' ')
 assert_eq "compile order" "$got" \
-	"natmapt stuntman luci-app-natmapt mihomo-alpha mihomo-bare "
+	"natmapt stuntman luci-app-natmapt mihomo-alpha mihomo-bare punchd "
 echo "$c" | grep -q '^compile.target=package/feeds/nikki/' &&
 	bad "no compile target under a bridge feed" ||
 	ok "no compile target under a bridge feed"
@@ -101,13 +112,13 @@ echo "$c" | grep -q '^compile.unlisted=' &&
 v=$(bp_section verify)
 gfail=0
 for g in natmapt stuntman-client luci-app-natmapt \
-	mihomo-alpha mihomo-bare; do
+	mihomo-alpha mihomo-bare punchd; do
 	echo "$v" | grep -Fxq "verify.apk=$g-*.apk" || {
 		bad "verify glob present: $g"
 		gfail=1
 	}
 done
-[ "$gfail" -eq 0 ] && ok "all five verify globs present"
+[ "$gfail" -eq 0 ] && ok "all six verify globs present"
 
 # ---- CLI guards
 if sh "$BP" bogus >/dev/null 2>&1; then

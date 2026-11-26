@@ -184,6 +184,11 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: build
+    # Only `main` publishes the live feed. A `workflow_dispatch` on a branch exists to
+    # answer "does the new package compile", and publishing a branch's index over the
+    # signed Pages feed would ship a package nobody merged yet (or drop one that is
+    # only in main) — the index is what every device's `apk update` reads.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

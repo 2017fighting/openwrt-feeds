@@ -1,0 +1,81 @@
+#!/bin/sh /etc/rc.common
+# punchd —— 路由器侧的 punch agent（home-ops ADR-0044）。
+#
+# 它做什么：每 15s 从集群拉一份「期望的 punch 列表」，对每个 punch 起/停一个
+# natmap 子进程（端口由 CR 里的 bindPort 声明），把 redirect 渲染成一张自有的
+# `table ip punch`，然后把观测结果 POST 回去。集群是唯一的声明源，路由器只是执行器
+# —— 所以这里**没有** UCI section、没有 /etc/config/punch：一条 punch 的端口只在
+# home-ops 的 `Punch` CR 里写一次，改端口不需要 logread 里找 UCI 选项名。
+#
+# 为什么是普通 init 脚本，而不是给 natmapt 加一个 UCI section（ADR-0044 明确写了）：
+# 一个 procd 实例 = 一次启动数据快照。natmapt 的 redirect 走 `data.firewall`，那份
+# 数据只在实例启动时可写，于是「一行期望状态 = 一个实例 = 一次 fw4 重建整个
+# inet fw4 表」（实测 ≈330ms + ≈1s 异步）。punchd 是它自己的人：状态由它自己每
+# 15s 整表重算，落在一张只属于 punch 的 nft 表里（`nft -f` 60–150ms，不碰生产规则）。
+# 于是 procd 在这里只需要做一件事：把这个守护进程看住（见 docs/adr 与
+# home-ops docs/research/punch/01-dnat-rendering.md 的实测数字）。
+#
+# START=95：排在上游所有网络/防火墙之后。fw4 在 START=19 就渲染完了
+# `/usr/share/nftables.d/ruleset-post/*.nft`，所以固件里已有的 punch include 规则
+# **先于** punchd 生效；punchd 起来后只是把文件重写成当前期望状态并 `nft -f`。
+# 不需要 STOP 值：没有清场动作要做（nft 表由 punchd 自己管，见它的首个 tick）。
+#
+# 本包只装这个脚本，**不**替运维 enable。binary 和默认配置随包到位，但 bearer token
+# 是设备本地的 /etc/punch/token（0600，本包不带）—— 装完就自启只会得到
+# "read token_file /etc/punch/token: no such file" 的一串 respawn 记录。放好 token
+# （形状见 /etc/punch/token.example）之后由人来开：
+#   /etc/init.d/punchd enable && /etc/init.d/punchd start
+USE_PROCD=1
+START=95
+
+CONF=/etc/punch/punch.conf
+TOKEN=/etc/punch/token
+PROG=/usr/bin/punchd
+
+start_service() {
+	# 二进制由本包自己装（/usr/bin/punchd），正常不会缺。缺了说明包被半卸、或这个
+	# 目录被别的固件覆盖过 —— 那就别起：起也只会 respawn 到放弃，日志里一堆 exec
+	# 失败，不如一条说明白的记录。
+	if [ ! -x "$PROG" ]; then
+		logger -t punchd "init: $PROG 不存在或不可执行 —— punchd 未启动（包没装全，或二进制被覆盖）"
+		return 0
+	fi
+
+	# /etc/punch 的权限是 0700（里面是 token）。包只在新装时定得住它；此前这个路径
+	# 是手工 scp 出来的，所以在这里幂等校准一次：目录 700、已有的 token 600。
+	# 失败不阻断（老设备上就是 root，不会失败；真失败也不该拦住映射）。
+	mkdir -p /etc/punch 2>/dev/null
+	chmod 700 /etc/punch 2>/dev/null
+	[ -f "$TOKEN" ] && chmod 600 "$TOKEN" 2>/dev/null
+
+	# token 缺失**不阻止**启动，这是 ADR-0044 的语义：拉不到期望状态 ≠ 期望为空，
+	# punchd 会保住现有映射并持续重试；真相由集群侧的 PunchNoHeartbeat 报出来。
+	# 但那条告警要人去读日志，所以这里先留一句更容易找到的话。
+	if [ ! -s "$TOKEN" ]; then
+		logger -t punchd "init: $TOKEN 不存在或为空 —— punchd 会启动但拉不到期望状态（模板 /etc/punch/token.example）"
+	fi
+
+	procd_open_instance main
+	procd_set_param command "$PROG" -config "$CONF"
+	# respawn <threshold> <timeout> <retry>：一小时内的崩溃按 5s 间隔重试 5 次，
+	# 之后放弃并留在日志里（默认 -1 = 永远重试）。选"有限次"而不是"永远"是为了
+	# 让坏配置/坏的镜像不变成每分钟一条的系统日志；超时后再崩溃，计数重新开始。
+	procd_set_param respawn 3600 5 5
+	# stdout/stderr → syslog（logread | grep punchd）。ADR-0044 的排障入口就是它：
+	# natmap 的 stderr 与渲染/回读的结果都从这里出去。
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	# 没有 procd_set_param limits：punchd 的 fd 用量是个位数（一个 HTTP 客户端 +
+	# 每个 punch 一个 natmap 子进程的一两个 socket），busybox 的默认上限（1024）
+	# 高出两个数量级；写一个拍出来的数字只会让下一个人以为它有依据。要加就说明
+	# 是哪一个资源撞了上限、怎么测到的。
+	procd_close_instance
+}
+
+# 没有 service_triggers / reload：配置是纯文本 /etc/punch/punch.conf，不是
+# /etc/config 下的 UCI 文件，procd 的 reload trigger 只认后者。改配置 =
+# `/etc/init.d/punchd restart`。
+#
+# 没有 stop_service / STOP：punchd 收到 SIGTERM 自己收掉 natmap 子进程；nft 表
+# 故意留着 —— 停机不该顺手撤掉还在生效的映射（回读/重建由下一次运行的第一个
+# tick 负责）。

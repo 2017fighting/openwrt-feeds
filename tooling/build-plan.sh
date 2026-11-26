@@ -160,7 +160,9 @@ _packages() {
 # Compile order. The set is derived (plan warns about anything unlisted); the
 # order is curated — the proven sequence, each luci app after its service
 # package. mihomo-bare 紧跟它依赖的核 mihomo-alpha：同一次构建先出核再出外壳。
-COMPILE_ORDER="natmapt stuntman luci-app-natmapt mihomo-alpha mihomo-bare"
+# punchd 排在最后：它只依赖 natmapt（已在前），而 golang/host 由 mihomo-alpha
+# 先编好并复用 —— Go 工具链一次构建只装一次。
+COMPILE_ORDER="natmapt stuntman luci-app-natmapt mihomo-alpha mihomo-bare punchd"
 
 # _prefetch <makefile> <pkg> — emit url=/dest= for one tarball package; skip
 # git-sourced packages (the SDK clones those itself). Git variant = the FIRST
@@ -253,7 +255,7 @@ cmd_plan() {
 
 	_header verify
 	echo "verify.out=bin/packages/\${ARCH}/$FEED_NAME"
-	for g in natmapt stuntman-client luci-app-natmapt mihomo-alpha mihomo-bare; do
+	for g in natmapt stuntman-client luci-app-natmapt mihomo-alpha mihomo-bare punchd; do
 		echo "verify.apk=$g-*.apk"
 	done
 }
@@ -483,6 +485,36 @@ cmd_compile() {
 			head -1 "$pkgdir/etc/init.d/mihomo-bare" | grep -q '^#!/bin/sh /etc/rc.common' \
 				|| die "mihomo-bare smoke: init shebang is not the rc.common form"
 			;;
+		punchd)
+			# 本 feed 自己的 Go 包（home-ops ADR-0044 的路由器侧）：git 源按 commit
+			# 钉住，SDK 自己 clone（无 dl/ 预取）；golang/host 复用 mihomo-alpha 已经
+			# 编好的那份（COMPILE_ORDER 把 punchd 排在它后面）。
+			(cd "$sdk" && make "package/feeds/$FEED_NAME/punchd/compile" -j"$(nproc)" V=s)
+			ls -l "$out"/punchd-*.apk
+			# 构建目录带版本号（punchd-<PKG_VERSION>），冒烟看 .pkgdir 整棵树。
+			pkgdir=$(find "$sdk/build_dir" -type d -path '*/.pkgdir/punchd' 2>/dev/null | head -1)
+			[ -n "$pkgdir" ] || die "punchd: .pkgdir not found in build_dir"
+			bin="$pkgdir/usr/bin/punchd"
+			[ -f "$bin" ] || die "punchd smoke: $bin is missing (the Go install path moved?)"
+			# Target-arch Go 二进制：绝不 exec（它要连集群、起 natmap、写 nft），
+			# 只认 ELF + 一条只有 agent 才有的特征串 —— fw4 的 include 路径只出现在
+			# internal/agent，所以它同时证明装的是 punchd 而不是集群那一半。
+			file "$bin" | grep -q ELF || die "punchd smoke: $bin is not an ELF binary"
+			strings "$bin" | grep -q '/usr/share/nftables.d/ruleset-post' \
+				|| die "punchd smoke: the fw4 include path is not embedded in $bin"
+			file "$bin"
+			# 脚本/配置冒烟：init 语法 + conffile 在位。另外断言包里没有 token ——
+			# 凭据是设备本地的，一旦被谁掉进 files/ 就是事故。
+			sh -n "$pkgdir/etc/init.d/punchd" || die "punchd smoke: init fails sh -n"
+			head -1 "$pkgdir/etc/init.d/punchd" | grep -q '^#!/bin/sh /etc/rc.common' \
+				|| die "punchd smoke: init shebang is not the rc.common form"
+			for f in etc/punch/punch.conf etc/punch/token.example; do
+				[ -f "$pkgdir/$f" ] || die "punchd smoke: missing $f"
+			done
+			if [ -e "$pkgdir/etc/punch/token" ]; then
+				die "punchd smoke: a token was packaged — credentials are device-local only"
+			fi
+			;;
 		*) die "no compile recipe for $pkg (extend cmd_compile)" ;;
 		esac
 	done
@@ -493,7 +525,7 @@ cmd_verify() {
 	[ -n "$ARCH" ] || die "ARCH is required for compile/verify"
 	out="$sdk/bin/packages/$ARCH/$FEED_NAME"
 	step "verify apks in $out"
-	for g in natmapt stuntman-client luci-app-natmapt mihomo-alpha mihomo-bare; do
+	for g in natmapt stuntman-client luci-app-natmapt mihomo-alpha mihomo-bare punchd; do
 		# natmapt-* also covers its script splits; the rest are one apk each
 		# (or PKGARCH:=all, indexed under every arch slice).
 		ls -l "$out"/$g-*.apk || fails=$((fails + 1))
