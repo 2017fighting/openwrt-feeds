@@ -7,9 +7,13 @@
 #
 # 源钉在 github.com/2017fighting/punch 的某一个 commit 上（不跟分支）。
 #
-# 现在钉的是 v0.1.0 那个 commit（835c615）：从 2e56c87 挪过来，是因为 LICENSE 就在那个
-# 提交里 —— PKG_LICENSE_FILES 指的必须是 tarball 里真有的文件。以后升到下一个 tag 同样
-# 做法：取 tag 指向的 40 位 sha，不要把这个变量写成 tag 名。
+# 现在钉的是 v0.2.1 那个 commit（33a1d68）：v0.2.1 = v0.1.0 + 「natmap 退出后重启它」——
+# 之前退出掉的子进程留在 runner 的 map 里，punchd 就只报 "natmap exited"、永不重试，整条
+# punch 要等人手动 restart 服务才回来（2026-11-26 在自家路由器上演练时实测）。同一版里还有
+# controller 侧的「down 不再删 ConfigMap，改成写 {"ip":"","port":0}」——那一半跑在集群里，
+# 与路由器无关。
+#
+# 以后升到下一个 tag 同样做法：取 tag 指向的 40 位 sha，不要把这个变量写成 tag 名。
 #
 # 升级 = 改四处，一起改（apk 只按 PKG_VERSION-PKG_RELEASE 排序，所以日期没变时必须动
 # release，否则已装设备看到的还是旧号）：
@@ -24,16 +28,17 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=punchd
-# 钉点：2017fighting/punch v0.1.0 = 835c615（2026-11-26）
+# 钉点：2017fighting/punch v0.2.1 = 33a1d68（2026-11-26）
 PKG_VERSION:=2026.11.26
-# 2：同一天的日期号不变，这一条才是设备的升级信号（v0.1.0 重钉 + 版本注入）。
-PKG_RELEASE:=2
+# 3：同一天重钉，日期号不变，这一条才是设备的升级信号（v0.2.0 与 v0.2.1 都落在同一天的
+# 日期号上，只有 release 能把它们排开）。apk 上验过：2026.11.26-r3 > 2026.11.26-r2。
+PKG_RELEASE:=3
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
 PKG_SOURCE_SUBDIR:=$(PKG_NAME)-$(PKG_VERSION)
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/2017fighting/punch.git
-PKG_SOURCE_VERSION:=835c6152aae4362263984857e32cc5f7fcf9441f
+PKG_SOURCE_VERSION:=33a1d6823a3084a9d41656a971b526d3c25ad2ba
 
 # 上游从 v0.1.0 起带 MIT LICENSE（那一侧 docs/adr/0001-release-identity.md 记的是为何到
 # 今天才补）。钉点必须落在一个含 LICENSE 的 commit 上，否则 PKG_LICENSE_FILES 指向的就是
@@ -68,7 +73,7 @@ endif
 # 就是 CI 从二进制里 grep 的那个值（tooling/build-plan.sh 的 compile 段）。
 # 写成字面值而不是 $(PKG_VERSION)-…：plan 是 shell 侧 grep，展开不了的表达式它读不到；
 # 代价是它就是第四个要跟着钉点走的常量（见文件头）。
-PKG_BUILD_VERSION:=2026.11.26-835c615
+PKG_BUILD_VERSION:=2026.11.26-33a1d68
 GO_PKG_LDFLAGS_X:=main.version=$(PKG_BUILD_VERSION)
 
 define Package/punchd
