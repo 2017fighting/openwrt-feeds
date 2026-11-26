@@ -7,7 +7,11 @@ Pages.
 - **OpenWrt version:** 25.12.4 (APK package manager)
 - **Architectures:** `x86_64`
 - **Live binary feed:** <https://2017fighting.github.io/openwrt-feeds/25.12.4/>
-- **Packages:** `natmapt` + `luci-app-natmapt` (TCP/UDP port mapping for full-cone NAT + LuCI app; <https://github.com/heiher/natmap>), `stuntman-client` (STUN client used by natmapt's NAT-type test; <https://github.com/jselbie/stunserver>), `mihomo-bare` (the bare-mihomo router runtime: procd + fetch/validate/swap + a tiny conntrack reply bypass so port-forwards survive TUN auto-route; no nikki wrapper), `mihomo-alpha` (the core `mihomo-bare` runs: built here from a commit-pinned upstream <https://github.com/MetaCubeX/mihomo> `Alpha` branch, `GOAMD64=v1` on x86_64), and `punchd` (the router side of the declared CGNAT punch: pulls the desired `Punch` list from the cluster, keeps one `natmap` child per punch and renders the DNAT into fw4's `ruleset-post`; built here from a commit-pinned <https://github.com/2017fighting/punch>)
+- **Packages:** `punchd` — the router side of the declared CGNAT punch: it pulls
+  the desired `Punch` list from the cluster, keeps one `natmap` child per punch
+  and renders the DNAT into fw4's `ruleset-post`. Built here from a
+  commit-pinned <https://github.com/2017fighting/punch>. Everything else it needs
+  (`natmap`, `ca-bundle`) comes from OpenWrt's own feeds.
 - **Quick install:** `sh -c "$(wget -O- https://2017fighting.github.io/openwrt-feeds/feed.sh)"`
 
 This repository is **both** the source feed (OpenWrt package `Makefile`s on
@@ -22,19 +26,22 @@ installs the signing key, registers the feed, and runs `apk update`:
 sh -c "$(wget -O- https://2017fighting.github.io/openwrt-feeds/feed.sh)"
 ```
 
-Then install packages and enable the service:
+Then install punchd and hand it the one thing a package must not carry:
 
 ```sh
-# natmapt (TCP/UDP port mapping for full-cone NAT) + LuCI app
-apk add natmapt luci-app-natmapt
-/etc/init.d/natmap enable && /etc/init.d/natmap start
+apk add punchd
+
+# The bearer token is device-local (0600) and never packaged — shape:
+# /etc/punch/token.example. The service stays disabled until you place it.
+install -m 600 /dev/null /etc/punch/token
+vi /etc/punch/token
+/etc/init.d/punchd enable && /etc/init.d/punchd start
 ```
 
-`apk add natmapt` auto-installs its runtime deps (`curl`, `jsonfilter`, `bash`),
-and `apk add luci-app-natmapt` auto-installs `coreutils-timeout` and
-`stuntman-client` (the STUN client for the NAT-type test) — resolved from the
-device's own repos plus this feed. Default OpenWrt ships busybox `ash`/`wget`
-rather than `bash`/`curl`, so those are pulled on install.
+`apk add punchd` auto-installs its runtime deps from the device's own repos:
+`natmap` (the binary punchd runs, one child per punch) and `ca-bundle` (system
+roots for its HTTPS calls to the cluster). The port declarations themselves are
+not on the router at all — they live in the cluster as `Punch` CRs.
 
 Prefer to read it first? See [`feed.sh`](feed.sh), mirrored on [the Pages
 site](https://2017fighting.github.io/openwrt-feeds/feed.sh). It is apk-only and
@@ -57,13 +64,15 @@ wget -O /etc/apk/keys/2017fighting.pem \
 echo 'https://2017fighting.github.io/openwrt-feeds/25.12.4/x86_64/packages.adb' \
   >> /etc/apk/repositories
 
-# 3. Install
+# 3. Install (natmap + ca-bundle come from the device's own repos)
 apk update
-apk add natmapt luci-app-natmapt
+apk add punchd
 
-# 4. Enable + start the service (procd)
-/etc/init.d/natmap enable
-/etc/init.d/natmap start
+# 4. Place the device-local token, then enable + start (procd)
+install -m 600 /dev/null /etc/punch/token
+vi /etc/punch/token        # shape: /etc/punch/token.example
+/etc/init.d/punchd enable
+/etc/init.d/punchd start
 ```
 
 Always point the feed at the **signed index file** (`packages.adb`), not the
@@ -91,11 +100,13 @@ OpenWrt signs its apk repos.
 dispatch):
 
 1. Download + extract the matching OpenWrt SDK.
-2. Register this repo as a feed (`src-link`) inside the SDK; register `luci`
-   only, not `packages` (see [`CLAUDE.md`](CLAUDE.md) for why).
-3. Pull the core libs `stuntman-client` needs (`boost`, `openssl`) into this
-   feed at CI time, then compile each package
-   (`make package/feeds/<feed>/<pkg>/compile`).
+2. Register this repo as a feed (`src-link`) inside the SDK, plus the SDK's
+   `base` feed (punchd's `+firewall4` resolves there); `packages` stays
+   unregistered, so `natmap`/`ca-bundle` remain runtime-only deps (see
+   [`CLAUDE.md`](CLAUDE.md) for why).
+3. Borrow the `golang` toolchain from the packages repo into this feed at CI
+   time, then compile `punchd`
+   (`make package/feeds/<feed>/punchd/compile`).
 4. Generate + sign the index (`make package/index` → `packages.adb`, signed
    in-place by `apk adbsign` — no separate `.sig`).
 5. Publish the whole site to GitHub Pages (`actions/deploy-pages`).
@@ -103,45 +114,38 @@ dispatch):
 ## Repository layout
 
 ```
-net/natmapt/           # natmapt — TCP/UDP port mapping for full-cone NAT (binary + scripts + init)
-net/stuntman/          # stuntman-client — STUN client (stunclient) for natmapt's NAT-type test
-net/punchd/            # punchd — declared-CGNAT punch agent (Go: natmap children + fw4 include)
-net/mihomo-bare/       # bare-mihomo router runtime (init + fetch/validate/swap + uci) — script-only, no compile
-luci/luci-app-natmapt/ # the natmapt LuCI app (htdocs + rpcd + translations)
-keys/                 # apk EC public signing key (committed; private key is a CI secret)
-tooling/              # keygen + Pages index helpers (gen-key.sh, make-index.sh)
-feed.sh               # one-shot on-device installer (key + feed + apk update)
-feeds.config          # supported feeds (version x arch) — drives the build matrix
-.github/workflows/    # CI: build, sign, publish
+net/punchd/          # punchd — declared-CGNAT punch agent (Go: natmap children + fw4 include)
+docs/adr/            # decision records (0002 retires the old natmapt/stuntman/mihomo packages)
+keys/                # apk EC public signing key (committed; private key is a CI secret)
+tooling/             # build plan + keygen + Pages index helpers
+feed.sh              # one-shot on-device installer (key + feed + apk update)
+feeds.config         # supported feeds (version x arch) — drives the build matrix
+.github/workflows/   # CI: build, sign, publish
 ```
 
 ## Adding a package
 
-Drop a new `<category>/<pkg>/Makefile` (standard OpenWrt package definition) at
-the repo root, then add the directory name to `COMPILE_ORDER` (and, if it ships
-an apk under a new name, to the `cmd_verify` glob list) in
+Drop `net/<pkg>/Makefile` (standard OpenWrt package definition) at the repo
+root, then add the directory name to `COMPILE_ORDER` (and, if it ships an apk
+under a new name, to the `cmd_verify` glob list) in
 [`tooling/build-plan.sh`](tooling/build-plan.sh) — that module owns install,
 compile order and verification, and `tooling/tests/` asserts it against the
-Makefiles. Nothing goes into `build.yml` by hand. It is **not** automatic —
-the SDK ships no core package sources and only builds feed packages, so anything
-needing a core lib (openssl/boost/…) or a standard runtime dep needs the patterns
-described in [`CLAUDE.md`](CLAUDE.md) (runtime-only deps via the unregistered
-`packages` feed; core libs pulled into this feed at CI time).
+Makefiles. Nothing goes into `build.yml` by hand. It is **not** automatic — the
+SDK ships no core package sources and only builds feed packages, so anything
+needing a core lib or a standard runtime dep needs the patterns described in
+[`CLAUDE.md`](CLAUDE.md) (runtime-only deps via the unregistered `packages`
+feed; core libs pulled into this feed at CI time).
 
 ## Adding a version or architecture
 
-Add an entry to [`feeds.config`](feeds.config) (and, for now, the inlined matrix
-in `build.yml`). The SDK tarball URL is derived from the entry.
+Add an entry to [`feeds.config`](feeds.config). The matrix in
+`build.yml` reads it with `jq`, and the SDK tarball URL is derived from the
+entry.
 
 ## License
 
-Package sources retain their upstream licenses. `natmapt` is **MIT** and
-`luci-app-natmapt` is **Apache-2.0** (<https://github.com/heiher/natmap>,
-<https://github.com/muink/luci-app-natmapt>). `stuntman` is **Apache-2.0**
-(<https://github.com/jselbie/stunserver>). `mihomo-bare` is **MIT** (this repo's
-own scripts) and `punchd` is built from <https://github.com/2017fighting/punch>,
-which carries no `LICENSE` file yet — so this feed asserts no license for it
-(`PKG_LICENSE` is deliberately left unset there). This feed also ships `libopenssl`
-(**Apache-2.0**) and `boost` (**BSL-1.0**) — pulled in at CI time as
-stuntman-client's build/runtime deps (redundant with the device's core, same
-versions).
+`punchd` is built from <https://github.com/2017fighting/punch>, which carries no
+`LICENSE` file yet — so this feed asserts no license for it (`PKG_LICENSE` is
+deliberately left unset there). The `golang` toolchain is borrowed at CI time
+from <https://github.com/openwrt/packages> (**BSD-3-Clause**) to build it; the
+apk feed itself publishes only `punchd`.

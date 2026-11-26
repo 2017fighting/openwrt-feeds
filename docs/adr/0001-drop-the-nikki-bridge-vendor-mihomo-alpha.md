@@ -1,5 +1,7 @@
 # Drop the nikki bridge; build mihomo-alpha from upstream Alpha here
 
+_Status: superseded by [ADR 0002](0002-consolidate-to-punchd.md) — `mihomo-alpha` and `mihomo-bare` are retired; the reasoning below is kept as history._
+
 The nikki stack (`mihomo-alpha` + `nikki` + `luci-app-nikki` + its zh-cn i18n
 split) used to arrive through a commit-pinned `src-git` bridge to
 `2017fighting/OpenWrt-nikki`. `mihomo-bare` replaced the nikki wrapper on the

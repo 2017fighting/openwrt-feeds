@@ -13,9 +13,9 @@
 #   PKG_VERSION        钉点提交的日期（2026-11-26；apk 只按它判升级）
 #   PKG_SOURCE_VERSION 40 位 sha
 #
-# 和 mihomo-alpha 一样故意不写 PKG_MIRROR_HASH：git tarball 的 sha256 无法离线推算，
-# 写了就意味着每次升级先跑一轮注定失败的 CI 把实际哈希读回来。副作用只有一个 ——
-# 本包必须被 build-plan.sh 认成 git 源，判据是 PKG_SOURCE_URL 以 .git 结尾。
+# 刻意不写 PKG_MIRROR_HASH：git tarball 的 sha256 无法离线推算，写了就意味着每次
+# 升级先跑一轮注定失败的 CI 把实际哈希读回来。副作用只有一个 —— 本包必须被
+# build-plan.sh 认成 git 源，判据是 PKG_SOURCE_URL 以 .git 结尾。
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=punchd
@@ -48,16 +48,16 @@ GO_PKG_BUILD_PKG:=github.com/2017fighting/punch/cmd/punchd
 include $(INCLUDE_DIR)/package.mk
 include $(TOPDIR)/feeds/packages/lang/golang/golang-package.mk
 
-# v1：与 mihomo-alpha 同一条理由 —— 跑的是同一批 x86_64 路由器（J1900/N5105 之类），
-# 换 v3 换来的那点性能不值得让一台老机器 SIGILL。
+# v1：跑的是 J1900/N5105 这类老 x86_64 路由器。GOAMD64=v1 是 Go 支持的最低基线，
+# v3 那点性能收益不值得换来一台机器 SIGILL。
 ifeq ($(GO_ARCH),amd64)
   GO_AMD64:=v1
 endif
 
 # 没有 PKG_BUILD_VERSION：punchd 里没有可 -X 注入的版本变量（-buildvcs=false），
-# 所以不像 mihomo-alpha 那样嵌一个 alpha-<sha7> 给 CI grep。CI 的冒烟改为认
-# agent 自己的特征串（fw4 include 路径 /usr/share/nftables.d/ruleset-post），
-# 见 tooling/build-plan.sh 的 compile。
+# 所以不像别的 Go 包那样嵌一个 <ver>-<sha7> 给 CI grep。CI 的冒烟改为认 agent
+# 自己的特征串（fw4 include 路径 /usr/share/nftables.d/ruleset-post），见
+# tooling/build-plan.sh 的 compile。
 define Package/punchd
   SECTION:=net
   CATEGORY:=Network
@@ -65,10 +65,18 @@ define Package/punchd
   URL:=https://github.com/2017fighting/punch
   # 依赖逐个对到代码行上（源码只在 cmd/punchd + internal/agent）：
   #
-  # +natmapt   punchd 唯一直接 exec 的外部程序：natmap.go 的 NewNatmap 先
+  # +natmap    punchd 唯一直接 exec 的外部程序：natmap.go 的 NewNatmap 先
   #            LookPath("natmap")、找不到才退回 /usr/bin/natmap，然后每个 punch 起一个
   #            `natmap -k 30 -s <stun> -h <http> -b <port> -4 -i <iface> -e <hook>` 子进程。
-  #            这个包就在本 feed 里，所以是真依赖（真装、真升级），不是运行时兜底。
+  #            natmap 是官方 openwrt/packages 的包（net/natmap；openwrt-25.12 里就是
+  #            同一份 20260214 上游），而 packages feed 在本仓库 CI 里刻意不注册 ——
+  #            所以这是运行时依赖：apk 的 Depends 里记着，设备 `apk add punchd` 时从
+  #            自己的官方仓库装它，CI 不编（与 curl/bash 同一条机制）。
+  #            以前这里写的是 +natmapt，即本仓库自带的一个更肥的变体（init/UCI + 5 个
+  #            脚本子包）；punchd 只用二进制，多出来的东西没有消费者，已随 ADR 0002
+  #            删除。注意 natmap 与 natmapt 抢同一批文件（/usr/bin/natmap、
+  #            /etc/config/natmap）：仍装着 natmapt 的设备要先 `apk del natmapt`
+  #            （ADR 0002 的迁移段）。
   #
   # +ca-bundle  cluster_url=https://punch.raenzo.com（files/punch.conf）：Go 的
   #            crypto/x509 只认 /etc/ssl/certs 里的系统根，而 ca-bundle 就是提供
@@ -82,9 +90,8 @@ define Package/punchd
   #            赖 firewall4 而不是 nftables：后名只给二进制，前者才是「写进去的规则
   #            能活过一次 fw4 reload」的那东西（nft 本身由它的 nftables-json 带来）。
   #            代价：base feed 是注册着的，CI 会连带真编 nftables-json/libnftnl/
-  #            libmnl/jansson + kmod-nft-*，与 mihomo-alpha 的 +ip-full/+kmod-tun
-  #            同类 —— 换 apk 的 Depends: 说的是实话。
-  DEPENDS:=+natmapt +ca-bundle +firewall4
+  #            libmnl/jansson + kmod-nft-* —— 换 apk 的 Depends: 说的是实话。
+  DEPENDS:=+natmap +ca-bundle +firewall4
 endef
 
 define Package/punchd/description

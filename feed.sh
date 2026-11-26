@@ -78,4 +78,6 @@ echo "update feeds"
 apk update
 
 echo "success"
-echo "now install:  apk add natmapt luci-app-natmapt"
+echo "now install:  apk add punchd"
+echo "then place /etc/punch/token (shape: /etc/punch/token.example) and run"
+echo "  /etc/init.d/punchd enable && /etc/init.d/punchd start"

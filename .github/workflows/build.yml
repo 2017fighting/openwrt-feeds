@@ -7,7 +7,6 @@ on:
     branches: [main]
     paths:
       - "net/**"
-      - "luci/**"
       - "feeds.config"
       - "keys/2017fighting.pem"
       - "feed.sh" # published to the Pages site root — republish on change
@@ -31,15 +30,15 @@ env:
   FEED_NAME: openwrtfeeds
 
 jobs:
-  # Fast host-side gate: exercises the shell modules (section status store)
-  # with stubbed jshn/jsonfilter adapters — no SDK needed. Runs once (not per
+  # Fast host-side gate: asserts the derived build plan (tooling/build-plan.sh
+  # plan) against this repo's own Makefiles — no SDK needed. Runs once (not per
   # matrix shard); the build job waits on it so a failure fails fast.
   tests:
     name: Host tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Section status store tests
+      - name: Build plan tests
         run: sh tooling/tests/run.sh
 
   # Read feeds.config and emit the matrix as JSON. Adding a version/arch is now
@@ -124,8 +123,6 @@ jobs:
       # prints the whole derived plan; Host tests assert it against the
       # Makefiles). The workflow only supplies the matrix and handles secrets.
       - name: Prepare feed (register + corelibs + install + config + prefetch)
-        env:
-          OPENWRT_VERSION: ${{ matrix.openwrt_version }}
         run: |
           SDK="$RUNNER_TEMP/sdk"
           sh tooling/build-plan.sh register "$SDK"

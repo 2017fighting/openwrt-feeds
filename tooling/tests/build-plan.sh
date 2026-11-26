@@ -12,26 +12,17 @@ assert_eq "feed name default" \
 	"$(echo "$plan" | sed -n 's/^feed_name=//p')" "openwrtfeeds"
 echo "$plan" | grep -q "^src_link=src-link openwrtfeeds $ROOT\$" &&
 	ok "src_link points at the repo root" || bad "src_link points at the repo root"
+# luci used to be registered for luci-app-natmapt; base is all punchd needs
+# (+firewall4 resolves there). docs/adr/0002.
 assert_eq "feeds.conf policy" \
-	"$(echo "$plan" | sed -n 's/^feeds_conf_policy=//p')" "luci+base+this-feed"
+	"$(echo "$plan" | sed -n 's/^feeds_conf_policy=//p')" "base+this-feed"
 
-# ---- [corelibs] — strategy-level refs only (Q11)
+# ---- [corelibs] — punchd's golang toolchain is the only borrow left
 c=$(bp_section corelibs)
-assert_eq "openssl repo" "$(echo "$c" | sed -n 's/^corelib.openssl.repo=//p')" \
-	"https://github.com/openwrt/openwrt.git"
-assert_eq "openssl ref stays a strategy template" \
-	"$(echo "$c" | sed -n 's/^corelib.openssl.ref=//p')" "openwrt-tag-v\${OPENWRT_VERSION}"
-assert_eq "boost repo" "$(echo "$c" | sed -n 's/^corelib.boost.repo=//p')" \
-	"https://github.com/openwrt/packages.git"
-assert_eq "boost ref is the SDK-pinned strategy" \
-	"$(echo "$c" | sed -n 's/^corelib.boost.ref=//p')" "packages-feed-pinned"
-assert_eq "boost extra include" \
-	"$(echo "$c" | sed -n 's/^corelib.boost.extra=//p')" "lang/python/python3-version.mk"
-assert_eq "openssl feed landing spot is libs/ (not its repo path package/libs/)" \
-	"$(echo "$c" | sed -n 's/^corelib.openssl.feed_dest=//p')" "libs/openssl"
-assert_eq "boost feed landing spot" \
-	"$(echo "$c" | sed -n 's/^corelib.boost.feed_dest=//p')" "libs/boost"
-assert_eq "golang repo (borrowed like boost)" \
+assert_eq "corelib set (golang only after ADR 0002)" \
+	"$(echo "$c" | sed -n 's/^corelib\.\([a-z]*\)\.repo=.*/\1/p' | sort | tr '\n' ' ')" \
+	"golang "
+assert_eq "golang repo (borrowed from the packages feed)" \
 	"$(echo "$c" | sed -n 's/^corelib.golang.repo=//p')" "https://github.com/openwrt/packages.git"
 assert_eq "golang ref is the SDK-pinned strategy" \
 	"$(echo "$c" | sed -n 's/^corelib.golang.ref=//p')" "packages-feed-pinned"
@@ -47,48 +38,25 @@ echo "$plan" | grep -q '^src-git ' &&
 # ---- [install] — derived source set + corelib extras
 i=$(bp_section install)
 assert_eq "corelib install extras" \
-	"$(echo "$i" | sed -n 's/^install.extras=//p')" "libopenssl boost golang "
+	"$(echo "$i" | sed -n 's/^install.extras=//p')" "golang "
 got=$(echo "$i" | sed -n 's/^install.package=//p' | sort | tr '\n' ' ')
-assert_eq "install set == every Makefile dir under net/ and luci/" "$got" \
-	"luci-app-natmapt mihomo-alpha mihomo-bare natmapt punchd stuntman "
-assert_eq "mihomo-alpha is installed from this feed, not a bridge" \
-	"$(echo "$i" | sed -n 's/^install.bridge=//p' | wc -l | tr -d ' ')" "0"
+assert_eq "install set == every Makefile dir under net/" "$got" "punchd "
 
-# ---- [config] — engine-off fragment present verbatim
+# ---- [config] — nothing to seed: golang/host is dependency-triggered
 cfg=$(bp_section config)
-echo "$cfg" | grep -qx 'CONFIG_PACKAGE_libopenssl=y' &&
-	ok "config selects libopenssl" || bad "config selects libopenssl"
-echo "$cfg" | grep -qx '# CONFIG_OPENSSL_ENGINE is not set' &&
-	ok "config disables engines" || bad "config disables engines"
+assert_eq "config seed is empty" "$cfg" ""
 
 # ---- [prefetch] — derived from the Makefiles themselves
 p=$(bp_section prefetch)
-natmap_ver=$(sed -n 's/^PKG_UPSTREAM_VERSION:=//p' "$ROOT/net/natmapt/Makefile" | head -1)
-assert_eq "natmap url derived (two-level Make var expansion)" \
-	"$(echo "$p" | sed -n 's/^prefetch.natmapt.url=//p')" \
-	"https://github.com/heiher/natmap/releases/download/$natmap_ver/natmap-$natmap_ver.tar.xz"
-assert_eq "natmap dest derived" \
-	"$(echo "$p" | sed -n 's/^prefetch.natmapt.dest=//p')" \
-	"dl/natmap-$natmap_ver.tar.xz"
-echo "$p" | grep -q '^prefetch.stuntman\.' &&
-	bad "git-proto source skipped from prefetch" ||
-	ok "git-proto source skipped from prefetch"
-# mihomo-alpha carries no PKG_MIRROR_HASH on purpose: the git-source rule must
-# read its PKG_SOURCE_URL (.git suffix), or CI would curl a git URL.
-assert_eq "mihomo-alpha source url is a .git url (the prefetch skip rule)" \
-	"$(sed -n 's/^PKG_SOURCE_URL:=\(.*\.git\)$/\1/p' "$ROOT/net/mihomo-alpha/Makefile" | head -1)" \
-	"https://github.com/MetaCubeX/mihomo.git"
-echo "$p" | grep -q '^prefetch.mihomo-alpha\.' &&
-	bad "mihomo-alpha skipped from prefetch (git source, no mirror hash)" ||
-	ok "mihomo-alpha skipped from prefetch (git source, no mirror hash)"
-# punchd 同一条规则（同一理由：git tarball 的 sha256 无法离线推算），而且钉的必须
-# 是一个 40 位 sha —— 跟分支就让「可复现」这句话失效了。
+# punchd carries no PKG_MIRROR_HASH on purpose: the git-source rule must read
+# its PKG_SOURCE_URL (.git suffix), or CI would curl a git URL.
 assert_eq "punchd source url is a .git url (the prefetch skip rule)" \
 	"$(sed -n 's/^PKG_SOURCE_URL:=\(.*\.git\)$/\1/p' "$ROOT/net/punchd/Makefile" | head -1)" \
 	"https://github.com/2017fighting/punch.git"
 echo "$p" | grep -q '^prefetch.punchd\.' &&
 	bad "punchd skipped from prefetch (git source, no mirror hash)" ||
 	ok "punchd skipped from prefetch (git source, no mirror hash)"
+# A branch would make "reproducible" a lie: the pin has to be a 40-hex sha.
 assert_eq "punchd is pinned by a 40-hex commit sha" \
 	"$(sed -n 's/^PKG_SOURCE_VERSION:=\([0-9a-f]\{40\}\)$/\1/p' "$ROOT/net/punchd/Makefile" | wc -l | tr -d ' ')" \
 	"1"
@@ -96,29 +64,18 @@ assert_eq "punchd is pinned by a 40-hex commit sha" \
 # ---- [compile] — curated order, no unlisted packages
 c=$(bp_section compile)
 got=$(echo "$c" | sed -n 's/^compile.target=package\/feeds\/[a-z]*\///p' | sed 's/\/compile$//' | tr '\n' ' ')
-assert_eq "compile order" "$got" \
-	"natmapt stuntman luci-app-natmapt mihomo-alpha mihomo-bare punchd "
+assert_eq "compile order" "$got" "punchd "
 echo "$c" | grep -q '^compile.target=package/feeds/nikki/' &&
 	bad "no compile target under a bridge feed" ||
 	ok "no compile target under a bridge feed"
-echo "$c" | grep -q '^compile.target=package/feeds/openwrtfeeds/mihomo-alpha/compile$' &&
-	ok "mihomo-alpha compiles under this feed's target" ||
-	bad "mihomo-alpha compiles under this feed's target"
 echo "$c" | grep -q '^compile.unlisted=' &&
 	bad "every derived package has a compile slot" ||
 	ok "every derived package has a compile slot"
 
-# ---- [verify] — apk globs, natmapt-* covering its splits
+# ---- [verify] — one apk glob
 v=$(bp_section verify)
-gfail=0
-for g in natmapt stuntman-client luci-app-natmapt \
-	mihomo-alpha mihomo-bare punchd; do
-	echo "$v" | grep -Fxq "verify.apk=$g-*.apk" || {
-		bad "verify glob present: $g"
-		gfail=1
-	}
-done
-[ "$gfail" -eq 0 ] && ok "all six verify globs present"
+assert_eq "verify globs == punchd only" \
+	"$(echo "$v" | sed -n 's/^verify.apk=//p' | tr '\n' ' ')" "punchd-*.apk "
 
 # ---- CLI guards
 if sh "$BP" bogus >/dev/null 2>&1; then
