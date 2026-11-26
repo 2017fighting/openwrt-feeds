@@ -26,7 +26,10 @@ names a concept that code, docs, and conversation should share.
   tarball's sha256 cannot be computed offline, so keeping one would cost a
   doomed CI run per bump — the cost is that the build plan must recognise git
   sources by `PKG_SOURCE_URL` ending in `.git`. Bumping a pin changes every
-  constant together.
+  constant together — `PKG_RELEASE` too when the date does not move (the pin
+  is a sha, so re-pinning within one day is otherwise invisible to apk).
+  The sha may well be a release tag's commit (`v0.1.0` = `835c615…` in
+  `punchd`): the pin is still the sha, never the tag name.
   _Avoid_: 版本、分支、频道
 
 ## CI

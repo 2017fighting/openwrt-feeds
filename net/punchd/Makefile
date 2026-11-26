@@ -5,13 +5,18 @@
 # 把端口绑上去，再把 DNAT redirect 渲染进 fw4 的 ruleset-post 并回读校验，最后把
 # 观测结果 POST 回去。路由器只是执行器 —— 没有 UCI section，改端口只改集群里的 CR。
 #
-# 源钉在本仓库自己的 github.com/2017fighting/punch 的某一个 commit 上（不跟分支）。
-# 2e56c87 是带上「首启自动建 ruleset-post 目录」那个修复的提交：出厂镜像上那个目录
-# 并不存在，钉在这个提交之前，第一台新设备的第一条 tick 就写不进 include。
+# 源钉在 github.com/2017fighting/punch 的某一个 commit 上（不跟分支）。
 #
-# 升级 = 改两处：
-#   PKG_VERSION        钉点提交的日期（2026-11-26；apk 只按它判升级）
-#   PKG_SOURCE_VERSION 40 位 sha
+# 现在钉的是 v0.1.0 那个 commit（835c615）：从 2e56c87 挪过来，是因为 LICENSE 就在那个
+# 提交里 —— PKG_LICENSE_FILES 指的必须是 tarball 里真有的文件。以后升到下一个 tag 同样
+# 做法：取 tag 指向的 40 位 sha，不要把这个变量写成 tag 名。
+#
+# 升级 = 改四处，一起改（apk 只按 PKG_VERSION-PKG_RELEASE 排序，所以日期没变时必须动
+# release，否则已装设备看到的还是旧号）：
+#   PKG_SOURCE_VERSION 40 位 sha —— 发布 tag 指向的那个 commit
+#   PKG_VERSION        那个 commit 的日期（apk 只按它判升级）
+#   PKG_RELEASE        同一日期内的重发计数（同日重钉 +1）
+#   PKG_BUILD_VERSION  二进制里那份身份（<PKG_VERSION>-<sha7>，CI 的冒烟 grep 它）
 #
 # 刻意不写 PKG_MIRROR_HASH：git tarball 的 sha256 无法离线推算，写了就意味着每次
 # 升级先跑一轮注定失败的 CI 把实际哈希读回来。副作用只有一个 —— 本包必须被
@@ -19,18 +24,22 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=punchd
-# 钉点：2017fighting/punch @ main 2e56c87（2026-11-26）
+# 钉点：2017fighting/punch v0.1.0 = 835c615（2026-11-26）
 PKG_VERSION:=2026.11.26
-PKG_RELEASE:=1
+# 2：同一天的日期号不变，这一条才是设备的升级信号（v0.1.0 重钉 + 版本注入）。
+PKG_RELEASE:=2
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
 PKG_SOURCE_SUBDIR:=$(PKG_NAME)-$(PKG_VERSION)
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/2017fighting/punch.git
-PKG_SOURCE_VERSION:=2e56c87328efbde9de0aa5149a26b2e496eb5f03
+PKG_SOURCE_VERSION:=835c6152aae4362263984857e32cc5f7fcf9441f
 
-# 上游仓库还没有 LICENSE 文件 —— 这里不替它声称一份（PKG_LICENSE 只是元数据，
-# 缺了不影响构建）；那边补上 LICENSE 之后，一行加回来即可。
+# 上游从 v0.1.0 起带 MIT LICENSE（那一侧 docs/adr/0001-release-identity.md 记的是为何到
+# 今天才补）。钉点必须落在一个含 LICENSE 的 commit 上，否则 PKG_LICENSE_FILES 指向的就是
+# 个 tarball 里不存在的文件。
+PKG_LICENSE:=MIT
+PKG_LICENSE_FILES:=LICENSE
 PKG_MAINTAINER:=2017fighting <2017fighting@users.noreply.github.com>
 
 PKG_BUILD_DEPENDS:=golang/host
@@ -54,10 +63,14 @@ ifeq ($(GO_ARCH),amd64)
   GO_AMD64:=v1
 endif
 
-# 没有 PKG_BUILD_VERSION：punchd 里没有可 -X 注入的版本变量（-buildvcs=false），
-# 所以不像别的 Go 包那样嵌一个 <ver>-<sha7> 给 CI grep。CI 的冒烟改为认 agent
-# 自己的特征串（fw4 include 路径 /usr/share/nftables.d/ruleset-post），见
-# tooling/build-plan.sh 的 compile。
+# 版本号烘进二进制：main.version 由 golang-package.mk 的 GO_PKG_LDFLAGS_X 注入
+# （-X main.version=…），所以设备上 `punchd -version` 打出来的就是这一串；PKG_BUILD_VERSION
+# 就是 CI 从二进制里 grep 的那个值（tooling/build-plan.sh 的 compile 段）。
+# 写成字面值而不是 $(PKG_VERSION)-…：plan 是 shell 侧 grep，展开不了的表达式它读不到；
+# 代价是它就是第四个要跟着钉点走的常量（见文件头）。
+PKG_BUILD_VERSION:=2026.11.26-835c615
+GO_PKG_LDFLAGS_X:=main.version=$(PKG_BUILD_VERSION)
+
 define Package/punchd
   SECTION:=net
   CATEGORY:=Network

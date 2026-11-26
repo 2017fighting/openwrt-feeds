@@ -392,6 +392,13 @@ cmd_compile() {
 			file "$bin" | grep -q ELF || die "punchd smoke: $bin is not an ELF binary"
 			strings "$bin" | grep -q '/usr/share/nftables.d/ruleset-post' \
 				|| die "punchd smoke: the fw4 include path is not embedded in $bin"
+			# 版本串（v0.1.0 起）：main.version 由 golang-package.mk 的 GO_PKG_LDFLAGS_X 注入，
+			# PKG_BUILD_VERSION 是它的字面值。上面那条 fw4 特征串在 -X 丢了/变量名改了时照样过，
+			# 这条才是「设备上的 `punchd -version` 能说出自己是谁」的守门。
+			buildver=$(sed -n 's/^PKG_BUILD_VERSION:=//p' "$FEED_ROOT/net/punchd/Makefile")
+			[ -n "$buildver" ] || die "punchd smoke: PKG_BUILD_VERSION is not a literal in net/punchd/Makefile"
+			strings "$bin" | grep -qF -- "$buildver" \
+				|| die "punchd smoke: '$buildver' is not embedded in $bin (GO_PKG_LDFLAGS_X / main.version?)"
 			file "$bin"
 			# 脚本/配置冒烟：init 语法 + conffile 在位。另外断言包里没有 token ——
 			# 凭据是设备本地的，一旦被谁掉进 files/ 就是事故。

@@ -60,6 +60,23 @@ echo "$p" | grep -q '^prefetch.punchd\.' &&
 assert_eq "punchd is pinned by a 40-hex commit sha" \
 	"$(sed -n 's/^PKG_SOURCE_VERSION:=\([0-9a-f]\{40\}\)$/\1/p' "$ROOT/net/punchd/Makefile" | wc -l | tr -d ' ')" \
 	"1"
+# …and the pin is what carries the licence claim: PKG_LICENSE_FILES names a file in the
+# pinned tarball, so a pin that predates the LICENSE commit would make it a lie. Parse
+# only: the suite is offline and never fetches the source.
+assert_eq "punchd claims MIT (the pinned commit carries LICENSE)" \
+	"$(sed -n 's/^PKG_LICENSE:=//p' "$ROOT/net/punchd/Makefile")" "MIT"
+assert_eq "punchd PKG_LICENSE_FILES points at LICENSE" \
+	"$(sed -n 's/^PKG_LICENSE_FILES:=//p' "$ROOT/net/punchd/Makefile")" "LICENSE"
+# PKG_BUILD_VERSION is grepped out of the built binary by the compile smoke, so it must be
+# the literal `<PKG_VERSION>-<sha7-of-the-pin>` — an unexpanded `$(PKG_VERSION)` would be a
+# string that grep can only find by accident.
+assert_eq "punchd PKG_BUILD_VERSION == <PKG_VERSION>-<sha7>" \
+	"$(sed -n 's/^PKG_BUILD_VERSION:=//p' "$ROOT/net/punchd/Makefile")" \
+	"$(sed -n 's/^PKG_VERSION:=//p' "$ROOT/net/punchd/Makefile")-$(sed -n 's/^PKG_SOURCE_VERSION:=//p' "$ROOT/net/punchd/Makefile" | cut -c1-7)"
+# The binary only says that string if golang-package.mk was told to inject it.
+assert_eq "punchd injects main.version from PKG_BUILD_VERSION" \
+	"$(sed -n 's/^GO_PKG_LDFLAGS_X:=main\.version=\$(PKG_BUILD_VERSION)$/ok/p' "$ROOT/net/punchd/Makefile")" \
+	"ok"
 
 # ---- [compile] — curated order, no unlisted packages
 c=$(bp_section compile)
