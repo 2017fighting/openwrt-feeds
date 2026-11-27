@@ -7,11 +7,15 @@
 #
 # 源钉在 github.com/2017fighting/punch 的某一个 commit 上（不跟分支）。
 #
-# 现在钉的是 v0.2.1 那个 commit（33a1d68）：v0.2.1 = v0.1.0 + 「natmap 退出后重启它」——
-# 之前退出掉的子进程留在 runner 的 map 里，punchd 就只报 "natmap exited"、永不重试，整条
-# punch 要等人手动 restart 服务才回来（2026-11-26 在自家路由器上演练时实测）。同一版里还有
-# controller 侧的「down 不再删 ConfigMap，改成写 {"ip":"","port":0}」——那一半跑在集群里，
-# 与路由器无关。
+# 现在钉的是 v0.2.2 那个 commit（47d6c08）：v0.2.2 = v0.2.1 + 「重启先停掉自己的 natmap
+# 子进程」。之前 punchd 收到 SIGTERM 直接返回，子进程被 init 收养后继续占着 bindPort，新一版
+# 根本绑不上（`[E] sock_connect src/hev-sock.c:60 Cannot assign requested address`），而 punch
+# 一直显示 up —— 孤儿还在往同一个 report 路径写，把问题藏住了（2026-11-26 在自家路由器上
+# 实测）。现在停机时 SIGTERM 每个子进程的进程组、等它退出、删掉它留下的 report；连 SIGTERM
+# 都跑不到的那种（`kill -9`、procd 的 term_timeout）由下一次启动的扫描收尾 —— 按
+# `-e <state_dir>/notify.sh` 认领，不误伤设备上别的 natmap。
+#
+# 上一版（v0.2.1）是「natmap 退出后重启它」；更早的 controller 侧改动跑在集群里，与路由器无关。
 #
 # 以后升到下一个 tag 同样做法：取 tag 指向的 40 位 sha，不要把这个变量写成 tag 名。
 #
@@ -28,17 +32,18 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=punchd
-# 钉点：2017fighting/punch v0.2.1 = 33a1d68（2026-11-26）
-PKG_VERSION:=2026.11.26
-# 3：同一天重钉，日期号不变，这一条才是设备的升级信号（v0.2.0 与 v0.2.1 都落在同一天的
-# 日期号上，只有 release 能把它们排开）。apk 上验过：2026.11.26-r3 > 2026.11.26-r2。
-PKG_RELEASE:=3
+# 钉点：2017fighting/punch v0.2.2 = 47d6c08（2026-11-27）
+PKG_VERSION:=2026.11.27
+# 1：v0.2.2 落在新的日期号上，release 从 1 重新开始。只有同一天重钉才需要 +1：
+# v0.2.0 与 v0.2.1 都落在 2026.11.26 上，只靠 release 排开（apk 上验过
+# 2026.11.26-r3 > 2026.11.26-r2）。2026.11.27-r1 > 2026.11.26-r3，apk 会照常升级。
+PKG_RELEASE:=1
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
 PKG_SOURCE_SUBDIR:=$(PKG_NAME)-$(PKG_VERSION)
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/2017fighting/punch.git
-PKG_SOURCE_VERSION:=33a1d6823a3084a9d41656a971b526d3c25ad2ba
+PKG_SOURCE_VERSION:=47d6c08b6b5ceb8049b3ca051a629739d57b112a
 
 # 上游从 v0.1.0 起带 MIT LICENSE（那一侧 docs/adr/0001-release-identity.md 记的是为何到
 # 今天才补）。钉点必须落在一个含 LICENSE 的 commit 上，否则 PKG_LICENSE_FILES 指向的就是
@@ -73,7 +78,7 @@ endif
 # 就是 CI 从二进制里 grep 的那个值（tooling/build-plan.sh 的 compile 段）。
 # 写成字面值而不是 $(PKG_VERSION)-…：plan 是 shell 侧 grep，展开不了的表达式它读不到；
 # 代价是它就是第四个要跟着钉点走的常量（见文件头）。
-PKG_BUILD_VERSION:=2026.11.26-33a1d68
+PKG_BUILD_VERSION:=2026.11.27-47d6c08
 GO_PKG_LDFLAGS_X:=main.version=$(PKG_BUILD_VERSION)
 
 define Package/punchd
